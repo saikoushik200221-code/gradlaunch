@@ -1,0 +1,14 @@
+node_modules/
+.env
+*.log
+frontend/.env.local
+backend/database.sqlite
+backend/users.json
+backend/*.log
+backend/*.err
+backend/error.txt
+backend/jobs.json
+backend/jobs_response.json
+backend/models.txt
+backend/server.log
+backend/server.err

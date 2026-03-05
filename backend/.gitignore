@@ -1,0 +1,13 @@
+node_modules/
+.env
+database.sqlite
+users.json
+*.log
+*.err
+server.log
+server.err
+error.txt
+jobs.json
+jobs_response.json
+models.txt
+test_embed.js
