@@ -24,10 +24,6 @@ app.get('/', (req, res) => {
     });
 });
 
-// JSON 404 Handler for specific undefined API routes (optional, but keep it clean)
-app.use('/api/*', (req, res) => {
-    res.status(404).json({ error: 'API route not found' });
-});
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
 
@@ -727,6 +723,17 @@ app.post('/api/sync', async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: 'Sync failed', message: err.message });
     }
+});
+
+
+// JSON 404 Handler for specific undefined API routes
+app.use('/api/*', (req, res) => {
+    res.status(404).json({ error: 'API route not found' });
+});
+
+// Final catch-all for any other non-API routes
+app.use((req, res) => {
+    res.status(404).json({ error: 'Resource not found' });
 });
 
 // End of file cleanup
