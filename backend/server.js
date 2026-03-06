@@ -253,19 +253,50 @@ function getPostedTime(dateString) {
     return days === 1 ? '1d ago' : `${days}d ago`;
 }
 
-// Parse the WeWorkRemotely RSS feed
+// Parse Remote Job RSS feeds (WWR, Remote OK)
 async function scrapeWWR() {
-    const RSS_URLS = [
-        'https://weworkremotely.com/categories/remote-full-stack-programming-jobs.rss',
-        'https://weworkremotely.com/categories/remote-back-end-programming-jobs.rss',
-        'https://weworkremotely.com/categories/remote-front-end-programming-jobs.rss',
+    const RSS_SOURCES = [
+        { url: 'https://weworkremotely.com/categories/remote-full-stack-programming-jobs.rss', source: 'WWR' },
+        { url: 'https://weworkremotely.com/categories/remote-back-end-programming-jobs.rss', source: 'WWR' },
+        { url: 'https://weworkremotely.com/categories/remote-front-end-programming-jobs.rss', source: 'WWR' },
+        { url: 'https://remoteok.com/remote-jobs.rss', source: 'RemoteOK' }
     ];
 
     const jobs = [];
 
-    for (const url of RSS_URLS) {
+    for (const entry of RSS_SOURCES) {
         try {
-            const { data } = await axios.get(url, { timeout: 10000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+            const { data } = await axios.get(entry.url, { timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+
+            if (entry.source === 'RemoteOK') {
+                // RemoteOK is RSS, but we handle it similarly to WWR
+                const $ = cheerio.load(data, { xmlMode: true });
+                $('item').each((i, el) => {
+                    const title = $(el).find('title').text().trim();
+                    const description = $(el).find('description').text().replace(/<[^>]*>?/gm, ' ').trim();
+                    const link = $(el).find('link').text().trim();
+                    const pubDate = $(el).find('pubDate').text().trim();
+
+                    jobs.push({
+                        id: `rok-${Date.now()}-${i}`,
+                        title,
+                        company: 'Remote OK Company', // RemoteOK RSS doesn't always have company in separate field
+                        location: 'Remote',
+                        type: 'Full-time',
+                        postedValue: new Date(pubDate).getTime(),
+                        posted: getPostedTime(pubDate),
+                        tags: generateTags(title, description, 'Remote', true),
+                        logo: 'R',
+                        match: getMatchScore(title),
+                        description: description.length > 500 ? description.slice(0, 500).trim() + '...' : description.trim(),
+                        skills: extractSkills(title, description),
+                        link
+                    });
+                });
+                continue;
+            }
+
+            // WWR is XML/RSS
             const $ = cheerio.load(data, { xmlMode: true });
 
             $('item').each((i, el) => {
@@ -308,7 +339,7 @@ async function scrapeWWR() {
                 });
             });
         } catch (err) {
-            console.warn(`Failed to fetch RSS from ${url}: ${err.message}`);
+            console.warn(`Failed to fetch RSS from ${entry.url}: ${err.message}`);
         }
     }
 

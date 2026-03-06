@@ -168,7 +168,7 @@ function JobSearch({ onAddToTracker, profileText }) {
     async function fetchJobs() {
       setLoadingJobs(true);
       try {
-        const res = await fetch("${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/jobs");
+        const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/jobs`);
         if (res.ok) {
           const data = await res.json();
           if (data && data.length > 0) setJobs(data);
@@ -188,7 +188,7 @@ function JobSearch({ onAddToTracker, profileText }) {
   async function analyzeFit() {
     setAnalyzing(true);
     try {
-      const res = await fetch("${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/anthropic/messages", {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/anthropic/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -416,7 +416,7 @@ function ResumeTailor({ initialJobDesc, jobUrl, globalContext }) {
     setAtsScore(null);
     setKeywords([]);
     try {
-      const res = await fetch("${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/anthropic/messages", {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/anthropic/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -599,7 +599,7 @@ function AppDetailModal({ app, onClose, onUpdate }) {
     if (!analysisText.trim()) return;
     setAnalyzing(true);
     try {
-      const res = await fetch("${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/anthropic/messages", {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/anthropic/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -621,7 +621,7 @@ function AppDetailModal({ app, onClose, onUpdate }) {
     if (!portalForm.url || !portalForm.email || !portalForm.password) return;
     setSyncing(true);
     try {
-      const res = await fetch("${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/sync", {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/sync`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ portalUrl: portalForm.url, email: portalForm.email, password: portalForm.password })
@@ -766,7 +766,7 @@ function AppTracker({ applications, setApplications }) {
     setSyncing(true);
     for (const app of linkedApps) {
       try {
-        const res = await fetch("${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/sync", {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/sync`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ portalUrl: app.portalUrl, email: app.portalEmail, password: "ASK_USER" }) // In a real app, you'd manage sessions better
@@ -908,7 +908,7 @@ function Profile({ globalContext, setGlobalContext, setGlobalVector, onProfileUp
     async function loadProfile() {
       const token = localStorage.getItem("token");
       try {
-        const res = await fetch("${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/profile", {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/profile`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
         if (res.ok) {
@@ -929,7 +929,7 @@ function Profile({ globalContext, setGlobalContext, setGlobalVector, onProfileUp
     const token = localStorage.getItem("token");
     const fullProfile = { ...profile, ...updates };
     try {
-      const res = await fetch("${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/profile", {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/profile`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify(fullProfile)
@@ -948,7 +948,7 @@ function Profile({ globalContext, setGlobalContext, setGlobalVector, onProfileUp
     setAnalyzing(true);
     setSaved(false);
     try {
-      const res = await fetch("${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/anthropic/messages", {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/anthropic/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1105,7 +1105,7 @@ function Copilot() {
     setLoading(true);
 
     try {
-      const res = await fetch("${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/anthropic/messages", {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/anthropic/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1307,7 +1307,7 @@ export default function GradLaunch() {
       const storedToken = localStorage.getItem("token");
       if (storedToken) {
         try {
-          const res = await fetch("${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/auth/me", {
+          const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/auth/me`, {
             headers: { "Authorization": `Bearer ${storedToken}` }
           });
           if (res.ok) {
