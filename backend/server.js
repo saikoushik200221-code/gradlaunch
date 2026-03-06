@@ -14,7 +14,20 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+// API Health Check / Root
+app.get('/', (req, res) => {
+    res.json({
+        message: "GradLaunch API is active",
+        version: "1.2.0",
+        status: "healthy",
+        uptime: process.uptime()
+    });
+});
+
+// JSON 404 Handler for specific undefined API routes (optional, but keep it clean)
+app.use('/api/*', (req, res) => {
+    res.status(404).json({ error: 'API route not found' });
+});
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
 
@@ -716,11 +729,7 @@ app.post('/api/sync', async (req, res) => {
     }
 });
 
-// Catch-all route to serve the SPA (for React Router)
-app.use((req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
+// End of file cleanup
 app.listen(PORT, () => {
     console.log(`[GradLaunch] Backend running on http://localhost:${PORT}`);
     if (!ANTHROPIC_API_KEY && !GEMINI_API_KEY) {
