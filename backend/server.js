@@ -86,89 +86,73 @@ function verifyToken(token) {
     }
 }
 
-const sqlite3 = require('sqlite3').verbose();
-const { open } = require('sqlite');
-const fs = require('fs');
+// [Phase 6] Turso Cloud DB + Local SQLite Fallback
+const TURSO_URL = process.env.TURSO_DATABASE_URL || '';
+const TURSO_TOKEN = process.env.TURSO_AUTH_TOKEN || '';
 
 let db;
-(async () => {
-    // Persistent SQLite user store
-    db = await open({
-        filename: path.join(__dirname, 'database.sqlite'),
-        driver: sqlite3.Database
-    });
-    // Create users table if not exists with a JSON column for profile
+
+// Turso HTTP API compatibility wrapper (no npm package needed)
+function createTursoDb(dbUrl, token) {
+    const apiBase = dbUrl.replace('libsql://', 'https://');
+
+    async function execute(sql, args = []) {
+        const res = await axios.post(`${apiBase}/v2/pipeline`, {
+            requests: [{ type: 'execute', stmt: { sql, args: args.map(a => a === null ? { type: 'null' } : { type: typeof a === 'number' ? 'integer' : 'text', value: String(a) }) } }, { type: 'close' }]
+        }, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            timeout: 30000
+        });
+        const result = res.data.results?.[0];
+        if (result?.type === 'error') throw new Error(result.error?.message || 'Turso error');
+        const cols = result?.response?.result?.cols?.map(c => c.name) || [];
+        const rows = (result?.response?.result?.rows || []).map(row =>
+            Object.fromEntries(cols.map((col, i) => [col, row[i]?.value ?? null]))
+        );
+        const lastInsertRowid = result?.response?.result?.last_insert_rowid;
+        return { rows, lastID: lastInsertRowid ? Number(lastInsertRowid) : null };
+    }
+
+    return {
+        exec: async (sql) => {
+            const stmts = sql.split(';').map(s => s.trim()).filter(Boolean);
+            for (const stmt of stmts) { try { await execute(stmt); } catch (e) { if (!e.message.includes('already exists')) throw e; } }
+        },
+        get: async (sql, params = []) => { const r = await execute(sql, params); return r.rows[0] || null; },
+        all: async (sql, params = []) => { const r = await execute(sql, params); return r.rows; },
+        run: async (sql, params = []) => { const r = await execute(sql, params); return { lastID: r.lastID }; }
+    };
+}
+
+async function initDb() {
+    if (TURSO_URL && TURSO_TOKEN) {
+        console.log('[GradLaunch] Using Turso cloud database ☁️');
+        db = createTursoDb(TURSO_URL, TURSO_TOKEN);
+    } else {
+        console.log('[GradLaunch] Using local SQLite database 💾');
+        const sqlite3 = require('sqlite3').verbose();
+        const { open } = require('sqlite');
+        const localDb = await open({ filename: path.join(__dirname, 'database.sqlite'), driver: sqlite3.Database });
+        db = {
+            exec: (sql) => localDb.exec(sql),
+            get: (sql, p = []) => localDb.get(sql, p),
+            all: (sql, p = []) => localDb.all(sql, p),
+            run: (sql, p = []) => localDb.run(sql, p)
+        };
+    }
+
     await db.exec(`
-        CREATE TABLE IF NOT EXISTS users (
-            id TEXT PRIMARY KEY,
-            name TEXT,
-            email TEXT UNIQUE,
-            password TEXT,
-            profile TEXT
-        )
+        CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT, email TEXT UNIQUE, password TEXT, profile TEXT);
+        CREATE TABLE IF NOT EXISTS saved_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, job_id TEXT, job_data TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, job_id));
+        CREATE TABLE IF NOT EXISTS applications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, company TEXT, role TEXT, logo TEXT, stage TEXT, notes TEXT, job_link TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS application_history (id INTEGER PRIMARY KEY AUTOINCREMENT, app_id INTEGER, stage TEXT, date TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, title TEXT, company TEXT, location TEXT, type TEXT, salary TEXT, salary_min INTEGER, salary_max INTEGER, tags TEXT, skills TEXT, description TEXT, link TEXT, posted TEXT, posted_value INTEGER, embedding TEXT, logo TEXT, match_score INTEGER, source TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)
     `);
-    // Create saved_jobs table
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS saved_jobs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT,
-            job_id TEXT,
-            job_data TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(user_id, job_id)
-        )
-    `);
-    // Create applications table
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS applications (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT,
-            company TEXT,
-            role TEXT,
-            logo TEXT,
-            stage TEXT,
-            notes TEXT,
-            job_link TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    `);
-    // Create application_history table
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS application_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            app_id INTEGER,
-            stage TEXT,
-            date TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    `);
-    // [Phase 5] Create persistent jobs table
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS jobs (
-            id TEXT PRIMARY KEY,
-            title TEXT,
-            company TEXT,
-            location TEXT,
-            type TEXT,
-            salary TEXT,
-            salary_min INTEGER,
-            salary_max INTEGER,
-            tags TEXT,
-            skills TEXT,
-            description TEXT,
-            link TEXT,
-            posted TEXT,
-            posted_value INTEGER,
-            embedding TEXT,
-            logo TEXT,
-            match_score INTEGER,
-            source TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    `);
-    // Create index for faster searching
-    await db.exec(`CREATE INDEX IF NOT EXISTS idx_jobs_company_title ON jobs(company, title)`);
-})();
+    try { await db.exec(`CREATE INDEX IF NOT EXISTS idx_jobs_company_title ON jobs(company, title)`); } catch (e) { }
+    console.log('[GradLaunch] Database initialized ✅');
+}
+
+initDb().catch(err => console.error('[GradLaunch] DB init failed:', err.message));
 
 // Auth Middleware
 const authenticateToken = (req, res, next) => {
