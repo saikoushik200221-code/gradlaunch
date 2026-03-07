@@ -3,7 +3,6 @@ import { TagBadge, LogoCircle, MatchRing, SkeletonCard, EmptyState } from "./Com
 import { computeSemanticScores } from "../utils/matching";
 
 export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, profileText, C }) {
-    const [query, setQuery] = useState("");
     const [jobs, setJobs] = useState([]);
     const [loading, setLoading] = useState(false);
     const [filter, setFilter] = useState("All");
@@ -18,8 +17,11 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
     // Real Job Data Fetching
     const [loadingJobs, setLoadingJobs] = useState(false);
     const [showSavedOnly, setShowSavedOnly] = useState(false);
+    const [retryCount, setRetryCount] = useState(0);
 
     useEffect(() => {
+        let retryTimer = null;
+
         async function fetchJobs() {
             setLoadingJobs(true);
             try {
@@ -32,15 +34,20 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                 if (res.ok) {
                     const data = await res.json();
                     setJobs(data || []);
+                    // If no jobs returned (DB empty on first boot), retry in 10s
+                    if (!data || data.length === 0) {
+                        retryTimer = setTimeout(() => setRetryCount(c => c + 1), 10000);
+                    }
                 }
             } catch (e) {
-                console.warn("Could not connect to local backend.", e);
+                console.warn("Could not connect to backend.", e);
+                retryTimer = setTimeout(() => setRetryCount(c => c + 1), 15000);
             }
             setLoadingJobs(false);
         }
         const debounce = setTimeout(fetchJobs, 300);
-        return () => clearTimeout(debounce);
-    }, [search, filters.remote, filters.newGrad]);
+        return () => { clearTimeout(debounce); if (retryTimer) clearTimeout(retryTimer); };
+    }, [search, filters.remote, filters.newGrad, retryCount]);
 
     useEffect(() => {
         setAnalysis(null);

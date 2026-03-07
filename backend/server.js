@@ -867,7 +867,10 @@ async function scrapeHN() {
 }
 
 // [Phase 5] Core Job Runner - Aggregates, Deduplicates, and Persists
+let isScraping = false;
 async function runJobScraper() {
+    if (isScraping) return;
+    isScraping = true;
     console.log('[GradLaunch] Starting background scraping cycle...');
     try {
         const [wwrJobs, anJobs, remotiveJobs, jobicyJobs, hnJobs, adzunaJobs, findworkJobs] = await Promise.all([
@@ -912,6 +915,8 @@ async function runJobScraper() {
         console.log('[GradLaunch] Scraping cycle complete.');
     } catch (err) {
         console.error('[GradLaunch] Scraping cycle failed:', err.message);
+    } finally {
+        isScraping = false;
     }
 }
 
@@ -944,7 +949,13 @@ app.get('/api/jobs', async (req, res) => {
 
         query += ' ORDER BY posted_value DESC LIMIT 200';
 
-        const rows = await db.all(query, params);
+        let rows = await db.all(query, params);
+
+        // If DB is empty (first boot), trigger an immediate scrape cycle
+        if (rows.length === 0 && !isScraping) {
+            console.log('[GradLaunch] DB is empty, triggering immediate scrape...');
+            runJobScraper(); // fire-and-forget for now
+        }
 
         // Map DB rows back to frontend format
         const jobs = rows.map(r => ({
