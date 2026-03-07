@@ -137,7 +137,18 @@ function AuthScreen({ onLogin, C }) {
           <button
             disabled={loading}
             onClick={() => setIsRegister(!isRegister)}
-            style={{ background: "transparent", border: "none", color: "#00F0FF", fontSize: 14, cursor: "pointer", textDecoration: "underline" }}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#00F0FF",
+              fontSize: 14,
+              cursor: "pointer",
+              textDecoration: "underline",
+              padding: "12px 20px", // Increased hit area
+              transition: "opacity 0.2s"
+            }}
+            onMouseOver={e => e.target.style.opacity = 0.8}
+            onMouseOut={e => e.target.style.opacity = 1}
           >
             {isRegister ? "Already have an account? Sign In" : "Don't have an account? Join now"}
           </button>
@@ -349,15 +360,35 @@ export default function GradLaunch() {
                 <div style={{ fontSize: 11, color: C.muted }}>{currentUser.email}</div>
               </div>
             </div>
-            <button onClick={() => setIsDark(!isDark)} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px", color: C.text, fontSize: 12, cursor: "pointer" }}>
-              {isDark ? "☀️ Light" : "🌙 Dark"}
-            </button>
-            <button onClick={handleLogout} style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px", color: C.muted, fontSize: 12, cursor: "pointer" }}>Logout</button>
+            <button onClick={handleLogout} style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px", color: C.muted, fontSize: 12, cursor: "pointer", width: "100%" }}>Logout</button>
           </div>
         </aside>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <header style={{ height: 60, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 24px", background: C.surface, justifyContent: "space-between" }}>
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{ background: "transparent", border: "none", color: C.text, fontSize: 20, cursor: "pointer" }}>{sidebarOpen ? "⬅\uFE0F" : "\u27A1\uFE0F"}</button>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{ background: "transparent", border: "none", color: C.text, fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center" }}>
+                {sidebarOpen ? "⬅\uFE0F" : "\u27A1\uFE0F"}
+              </button>
+              <button
+                onClick={() => setIsDark(!isDark)}
+                style={{
+                  background: C.card,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 12,
+                  padding: "6px 12px",
+                  color: C.text,
+                  fontSize: 12,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontWeight: 600,
+                  transition: "all 0.2s"
+                }}
+              >
+                {isDark ? "☀️ Light" : "🌙 Dark"}
+              </button>
+            </div>
             <div style={{ border: `1px solid ${C.border}`, borderRadius: 20, padding: "4px 12px", fontSize: 12, background: C.card, color: C.accent, fontWeight: 800 }}>8M+ Global Jobs</div>
           </header>
           <main style={{ flex: 1, padding: 24, overflowY: "auto" }}>
