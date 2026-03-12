@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useRef } from "react";
-import { COLORS, LIGHT_COLORS, FONTS } from "./theme";
+import { COLORS, LIGHT_COLORS, FONTS, SHADOWS } from "./theme";
 import { Toast } from "./components/Common";
 import JobSearch from "./components/JobSearch";
 import AppTracker from "./components/AppTracker";
 import ResumeTailor from "./components/ResumeTailor";
 import Copilot from "./components/Copilot";
 import Profile from "./components/Profile";
+import Dashboard from "./components/Dashboard";
+import JobView from "./components/JobView";
+import { Routes, Route, useNavigate, useLocation, Navigate } from "react-router-dom";
+
 
 // ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
 function AuthScreen({ onLogin, C }) {
@@ -158,12 +162,45 @@ function AuthScreen({ onLogin, C }) {
   );
 }
 
+// ─── ERROR BOUNDARY ────────────────────────────────────────────────────────
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 40, background: "#0D1117", color: "#fff", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
+          <h1 style={{ fontSize: 48 }}>Oops! 🚧</h1>
+          <p style={{ color: "#94A3B8", fontSize: 18, maxWidth: 500 }}>
+            Something went wrong in the GradLaunch component. This is often due to a state mismatch or an unexpected API response.
+          </p>
+          <pre style={{ background: "rgba(255,0,0,0.1)", padding: 20, borderRadius: 12, fontSize: 13, color: "#FF3B30", border: "1px solid #FF3B3033" }}>
+            {this.state.error?.toString()}
+          </pre>
+          <button onClick={() => window.location.reload()} style={{ marginTop: 24, padding: "12px 24px", borderRadius: 12, background: "#00F0FF", color: "#000", border: "none", cursor: "pointer", fontWeight: 700 }}>
+            Reload Application
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ─── MAIN APP ────────────────────────────────────────────────────────────────
-export default function GradLaunch() {
+function GradLaunchContent() {
   const [isDark, setIsDark] = useState(true);
   const C = isDark ? COLORS : LIGHT_COLORS;
 
-  const [tab, setTab] = useState("jobs");
+  const navigate = useNavigate();
+  const location = useLocation();
+  const currentTab = location.pathname.split("/")[1] || "dashboard";
+
   const [applications, setApplications] = useState([]);
   const [savedJobs, setSavedJobs] = useState([]);
   const [prefilledJob, setPrefilledJob] = useState({ description: "", link: "" });
@@ -233,7 +270,8 @@ export default function GradLaunch() {
             role: job.title,
             logo: job.logo,
             stage,
-            job_link: job.link
+            job_link: job.link,
+            match_score: job.match || 85
           })
         });
         if (res.ok) {
@@ -250,10 +288,10 @@ export default function GradLaunch() {
     }
 
     if (job.wishlist) {
-      setTab("tracker");
+      navigate("/tracker");
     } else {
       setPrefilledJob({ description: job.description, link: job.link });
-      setTab("resume");
+      navigate("/resume");
     }
   }
 
@@ -302,11 +340,12 @@ export default function GradLaunch() {
   }
 
   const TABS = [
-    { id: "jobs", label: "Job Search", icon: "🔍" },
-    { id: "copilot", label: "AI Copilot", icon: "🤖" },
-    { id: "resume", label: "Resume AI", icon: "✨" },
-    { id: "tracker", label: "My Applications", icon: "📊" },
-    { id: "profile", label: "Profile", icon: "👤" },
+    { id: "dashboard", label: "Dashboard", icon: "📊", path: "/" },
+    { id: "jobs", label: "Job Search", icon: "🔍", path: "/jobs" },
+    { id: "copilot", label: "AI Copilot", icon: "🤖", path: "/copilot" },
+    { id: "resume", label: "Resume AI", icon: "✨", path: "/resume" },
+    { id: "tracker", label: "Kanban Board", icon: "📋", path: "/tracker" },
+    { id: "profile", label: "Profile", icon: "👤", path: "/profile" },
   ];
 
   return (
@@ -344,7 +383,7 @@ export default function GradLaunch() {
           </div>
           <nav style={{ flex: 1, padding: "0 12px", display: "flex", flexDirection: "column", gap: 4 }}>
             {TABS.map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)} className={`sidebar-item ${tab === t.id ? "sidebar-active" : ""}`} style={{ background: "transparent", border: "none", borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", color: tab === t.id ? C.accent : C.muted, fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, textAlign: "left" }}>
+              <button key={t.id} onClick={() => navigate(t.path)} className={`sidebar-item ${currentTab === t.id || (t.id === "dashboard" && currentTab === "dashboard") ? "sidebar-active" : ""}`} style={{ background: "transparent", border: "none", borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", color: (currentTab === t.id || (t.id === "dashboard" && currentTab === "dashboard")) ? C.accent : C.muted, fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, textAlign: "left" }}>
                 <span style={{ fontSize: 18 }}>{t.icon}</span>
                 {t.label}
               </button>
@@ -353,11 +392,11 @@ export default function GradLaunch() {
           <div style={{ padding: 20, borderTop: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{ width: 36, height: 36, borderRadius: "50%", background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`, display: "flex", alignItems: "center", justifyContent: "center", color: "#000", fontWeight: 800, fontSize: 14 }}>
-                {currentUser.name?.[0]?.toUpperCase() || "U"}
+                {currentUser?.name?.[0]?.toUpperCase() || "U"}
               </div>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700 }}>{currentUser.name}</div>
-                <div style={{ fontSize: 11, color: C.muted }}>{currentUser.email}</div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>{currentUser?.name || "User"}</div>
+                <div style={{ fontSize: 11, color: C.muted }}>{currentUser?.email || ""}</div>
               </div>
             </div>
             <button onClick={handleLogout} style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px", color: C.muted, fontSize: 12, cursor: "pointer", width: "100%" }}>Logout</button>
@@ -393,16 +432,29 @@ export default function GradLaunch() {
           </header>
           <main style={{ flex: 1, padding: 24, overflowY: "auto" }}>
             <div style={{ maxWidth: 1200, margin: "0 auto", animation: "fadeIn 0.3s ease-out" }}>
-              {tab === "jobs" && <JobSearch onAddToTracker={handleAddToTracker} onToggleSave={handleToggleSave} savedJobs={savedJobs} profileText={profileText} C={C} />}
-              {tab === "copilot" && <Copilot C={C} />}
-              {tab === "resume" && <ResumeTailor initialJobDesc={prefilledJob.description} jobUrl={prefilledJob.link} globalContext={globalProfileContext} C={C} />}
-              {tab === "tracker" && <AppTracker applications={applications} setApplications={setApplications} C={C} />}
-              {tab === "profile" && <Profile C={C} globalContext={globalProfileContext} setGlobalContext={setGlobalProfileContext} setGlobalVector={setProfileText} currentUser={currentUser} onProfileUpdate={(p) => { if (p.name) setCurrentUser(prev => ({ ...prev, name: p.name })); showToast("\u2705 Profile updated!"); }} />}
+              <Routes>
+                <Route path="/" element={<Dashboard C={C} />} />
+                <Route path="/jobs" element={<JobSearch onAddToTracker={handleAddToTracker} onToggleSave={handleToggleSave} savedJobs={savedJobs} profileText={profileText} C={C} />} />
+                <Route path="/job/:id" element={<JobView C={C} onAddToTracker={handleAddToTracker} savedJobs={savedJobs} />} />
+                <Route path="/copilot" element={<Copilot C={C} />} />
+                <Route path="/resume" element={<ResumeTailor initialJobDesc={prefilledJob.description} jobUrl={prefilledJob.link} globalContext={globalProfileContext} C={C} />} />
+                <Route path="/tracker" element={<AppTracker applications={applications} setApplications={setApplications} C={C} />} />
+                <Route path="/profile" element={<Profile C={C} globalContext={globalProfileContext} setGlobalContext={setGlobalProfileContext} setGlobalVector={setProfileText} currentUser={currentUser} onProfileUpdate={(p) => { if (p.name) setCurrentUser(prev => ({ ...prev, name: p.name })); showToast("\u2705 Profile updated!"); }} />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
             </div>
           </main>
         </div>
         {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} C={C} />}
       </div>
     </>
+  );
+}
+
+export default function GradLaunch() {
+  return (
+    <ErrorBoundary>
+      <GradLaunchContent />
+    </ErrorBoundary>
   );
 }

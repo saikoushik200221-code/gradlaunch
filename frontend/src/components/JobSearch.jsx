@@ -304,13 +304,13 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
 
                         <div style={{ padding: 24, background: C.card, borderTop: `1px solid ${C.border}`, display: "flex", gap: 16 }}>
                             <button
-                                onClick={() => onAddToTracker({ ...selectedJob, wishlist: true })}
+                                onClick={() => onAddToTracker({ ...selectedJob, wishlist: true, match: analysis?.score || selectedJob.match || 85 })}
                                 style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, color: C.text, padding: "16px", borderRadius: 14, fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, cursor: "pointer", transition: "all 0.2s" }}
                             >
                                 Bookmark Job
                             </button>
                             <button
-                                onClick={() => onAddToTracker(selectedJob)}
+                                onClick={() => onAddToTracker({ ...selectedJob, match: analysis?.score || selectedJob.match || 85 })}
                                 style={{ flex: 1, background: C.accent, border: "none", color: "#000", padding: "16px", borderRadius: 14, fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 15, cursor: "pointer", transition: "all 0.2s", boxShadow: `0 8px 24px ${C.accent}33` }}
                             >
                                 Apply & Tailor Resume
