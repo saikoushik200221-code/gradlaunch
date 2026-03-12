@@ -38,6 +38,7 @@ export default function Profile({ globalContext, setGlobalContext, setGlobalVect
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState("");
+    const [emailNotifications, setEmailNotifications] = useState("none");
 
     useEffect(() => {
         async function loadProfile() {
@@ -52,10 +53,30 @@ export default function Profile({ globalContext, setGlobalContext, setGlobalVect
                     if (data.aiContext) setGlobalContext(data.aiContext);
                     if (data.skills) setGlobalVector(`${data.skills} ${data.targetRole} ${data.baseResume} ${data.aiContext || ""}`);
                 }
+                // Load notification settings
+                const notifRes = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/notifications/settings`, {
+                    headers: { "Authorization": `Bearer ${token}` }
+                });
+                if (notifRes.ok) {
+                    const notifData = await notifRes.json();
+                    setEmailNotifications(notifData.emailNotifications || "none");
+                }
             } catch (e) { console.error("Profile load failed", e); }
         }
         loadProfile();
     }, [setGlobalContext, setGlobalVector]);
+
+    async function updateEmailNotifications(value) {
+        setEmailNotifications(value);
+        const token = localStorage.getItem("token");
+        try {
+            await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/notifications/settings`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                body: JSON.stringify({ emailNotifications: value })
+            });
+        } catch (e) { console.error("Notification setting failed", e); }
+    }
 
     async function saveProfile(updates = {}) {
         setSaving(true);
@@ -107,6 +128,12 @@ export default function Profile({ globalContext, setGlobalContext, setGlobalVect
         setAnalyzing(false);
     }
 
+    const notifOptions = [
+        { value: "none", label: "Off", icon: "🔕" },
+        { value: "instant", label: "Instant", icon: "⚡" },
+        { value: "daily", label: "Daily", icon: "📅" }
+    ];
+
     return (
         <div style={{ display: "flex", gap: 24, height: "100%" }}>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 20, overflowY: "auto" }}>
@@ -155,6 +182,45 @@ export default function Profile({ globalContext, setGlobalContext, setGlobalVect
                     <textarea value={profile.baseResume} onChange={e => setProfile(p => ({ ...p, baseResume: e.target.value }))}
                         placeholder="Paste your everything-resume here..."
                         style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px", color: C.text, fontFamily: "'DM Sans', sans-serif", fontSize: 13, outline: "none", boxSizing: "border-box", minHeight: 200, resize: "vertical", lineHeight: 1.6 }} />
+                </div>
+
+                {/* Email Notification Preferences */}
+                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, padding: 24 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                        <span style={{ fontSize: 22 }}>📧</span>
+                        <div>
+                            <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 16, color: C.text }}>Email Notifications</div>
+                            <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 12, color: C.muted }}>Get alerts when jobs match your profile &gt;85%</div>
+                        </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 10 }}>
+                        {notifOptions.map(opt => (
+                            <button
+                                key={opt.value}
+                                onClick={() => updateEmailNotifications(opt.value)}
+                                style={{
+                                    flex: 1,
+                                    padding: "14px 10px",
+                                    borderRadius: 12,
+                                    border: emailNotifications === opt.value ? `2px solid ${C.accent}` : `1px solid ${C.border}`,
+                                    background: emailNotifications === opt.value ? `${C.accent}15` : "transparent",
+                                    color: emailNotifications === opt.value ? C.accent : C.muted,
+                                    fontFamily: "'Syne', sans-serif",
+                                    fontWeight: 700,
+                                    fontSize: 13,
+                                    cursor: "pointer",
+                                    transition: "all 0.2s",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    alignItems: "center",
+                                    gap: 6
+                                }}
+                            >
+                                <span style={{ fontSize: 20 }}>{opt.icon}</span>
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 {globalContext && (

@@ -9,6 +9,12 @@ const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 const { parseResumePDF } = require('./parser');
 const { syncApplicationStatus } = require('./syncService');
+const { OAuth2Client } = require('google-auth-library');
+const { initMailer, sendJobAlertEmail, sendInterviewReminderEmail } = require('./mailer');
+const cron = require('node-cron');
+
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -148,12 +154,19 @@ async function initDb() {
     await db.exec(`
         CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT, email TEXT UNIQUE, password TEXT, profile TEXT);
         CREATE TABLE IF NOT EXISTS saved_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, job_id TEXT, job_data TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, job_id));
-        CREATE TABLE IF NOT EXISTS applications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, company TEXT, role TEXT, logo TEXT, stage TEXT, notes TEXT, job_link TEXT, match_score INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS applications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, company TEXT, role TEXT, logo TEXT, stage TEXT, notes TEXT, job_link TEXT, match_score INTEGER, interview_date TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS application_history (id INTEGER PRIMARY KEY AUTOINCREMENT, app_id INTEGER, stage TEXT, date TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, title TEXT, company TEXT, location TEXT, type TEXT, salary TEXT, salary_min INTEGER, salary_max INTEGER, tags TEXT, skills TEXT, description TEXT, link TEXT, posted TEXT, posted_value INTEGER, embedding TEXT, logo TEXT, match_score INTEGER, source TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)
     `);
     try { await db.exec(`CREATE INDEX IF NOT EXISTS idx_jobs_company_title ON jobs(company, title)`); } catch (e) { }
+    // Migration: add email_notifications column
+    try { await db.exec(`ALTER TABLE users ADD COLUMN email_notifications TEXT DEFAULT 'none'`); } catch (e) { }
+    // Migration: add interview_date column to applications
+    try { await db.exec(`ALTER TABLE applications ADD COLUMN interview_date TEXT`); } catch (e) { }
     console.log('[GradLaunch] Database initialized ✅');
+
+    // Initialize mailer
+    initMailer();
 }
 
 initDb().catch(err => console.error('[GradLaunch] DB init failed:', err.message));
@@ -228,6 +241,42 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
+// --- GOOGLE OAUTH ---
+app.post('/api/auth/google', async (req, res) => {
+    const { credential } = req.body;
+    if (!credential) return res.status(400).json({ error: 'Missing Google credential' });
+
+    try {
+        const ticket = await googleClient.verifyIdToken({
+            idToken: credential,
+            audience: GOOGLE_CLIENT_ID
+        });
+        const payload = ticket.getPayload();
+        const { email, name, sub: googleId } = payload;
+
+        // Check if user already exists
+        let user = await db.get('SELECT * FROM users WHERE email = ?', [email]);
+
+        if (!user) {
+            // Auto-register the Google user
+            const id = Date.now().toString();
+            const hashedPassword = hashPassword(`google_${googleId}_${Date.now()}`);
+            await db.run(
+                'INSERT INTO users (id, name, email, password, profile) VALUES (?, ?, ?, ?, ?)',
+                [id, name, email, hashedPassword, null]
+            );
+            user = { id, name, email };
+            console.log(`[GradLaunch] New Google user registered: ${email}`);
+        }
+
+        const token = signToken({ id: user.id, email: user.email, name: user.name });
+        res.json({ token, user: { id: user.id, name: user.name, email: user.email } });
+    } catch (err) {
+        console.error('Google OAuth error:', err.message);
+        res.status(401).json({ error: 'Invalid Google credential' });
+    }
+});
+
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
     try {
         const user = await db.get('SELECT id, name, email FROM users WHERE id = ?', [req.user.id]);
@@ -235,6 +284,29 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
         res.json({ user });
     } catch (err) {
         res.status(500).json({ error: 'Error validating session' });
+    }
+});
+
+// --- NOTIFICATION PREFERENCES ---
+app.get('/api/notifications/settings', authenticateToken, async (req, res) => {
+    try {
+        const user = await db.get('SELECT email_notifications FROM users WHERE id = ?', [req.user.id]);
+        res.json({ emailNotifications: user?.email_notifications || 'none' });
+    } catch (err) {
+        res.status(500).json({ error: 'Error fetching settings' });
+    }
+});
+
+app.post('/api/notifications/settings', authenticateToken, async (req, res) => {
+    const { emailNotifications } = req.body; // 'instant', 'daily', 'none'
+    if (!['instant', 'daily', 'none'].includes(emailNotifications)) {
+        return res.status(400).json({ error: 'Invalid notification setting' });
+    }
+    try {
+        await db.run('UPDATE users SET email_notifications = ? WHERE id = ?', [emailNotifications, req.user.id]);
+        res.json({ message: 'Settings updated', emailNotifications });
+    } catch (err) {
+        res.status(500).json({ error: 'Error updating settings' });
     }
 });
 
@@ -992,6 +1064,24 @@ async function runJobScraper() {
         // Cleanup old jobs (older than 7 days)
         await db.run("DELETE FROM jobs WHERE created_at < datetime('now', '-7 days')");
 
+        // [Phase 9] Send email alerts for new high-match jobs
+        if (newJobs.length > 0) {
+            try {
+                const usersWithAlerts = await db.all(
+                    "SELECT id, name, email, profile FROM users WHERE email_notifications = 'instant'"
+                );
+                for (const u of usersWithAlerts) {
+                    // Filter jobs with match score > 85
+                    const highMatchJobs = newJobs.filter(j => (j.match || getMatchScore(j.title)) >= 85).slice(0, 5);
+                    if (highMatchJobs.length > 0) {
+                        await sendJobAlertEmail(u.email, u.name, highMatchJobs);
+                    }
+                }
+            } catch (alertErr) {
+                console.error('[GradLaunch] Alert email error:', alertErr.message);
+            }
+        }
+
         console.log('[GradLaunch] Scraping cycle complete.');
     } catch (err) {
         console.error('[GradLaunch] Scraping cycle failed:', err.message);
@@ -1003,6 +1093,34 @@ async function runJobScraper() {
 // Start the first scrape after a short delay, then every 20 minutes
 setTimeout(runJobScraper, 5000);
 setInterval(runJobScraper, 20 * 60 * 1000);
+
+// [Phase 9] Interview Reminder Cron - Runs daily at 8 AM
+cron.schedule('0 8 * * *', async () => {
+    console.log('[GradLaunch] Running interview reminder check...');
+    try {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+        const apps = await db.all(
+            `SELECT a.*, u.email, u.name as user_name FROM applications a 
+             JOIN users u ON a.user_id = u.id 
+             WHERE a.interview_date = ? AND u.email_notifications != 'none'`,
+            [tomorrowStr]
+        );
+
+        for (const app of apps) {
+            await sendInterviewReminderEmail(app.email, app.user_name, {
+                title: app.role,
+                company: app.company,
+                interviewDate: app.interview_date
+            });
+        }
+        console.log(`[GradLaunch] Sent ${apps.length} interview reminders.`);
+    } catch (err) {
+        console.error('[GradLaunch] Interview reminder error:', err.message);
+    }
+});
 
 app.get('/api/jobs', async (req, res) => {
     try {

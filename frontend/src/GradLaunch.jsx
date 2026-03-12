@@ -9,6 +9,7 @@ import Profile from "./components/Profile";
 import Dashboard from "./components/Dashboard";
 import JobView from "./components/JobView";
 import { Routes, Route, useNavigate, useLocation, Navigate } from "react-router-dom";
+import { GoogleLogin } from "@react-oauth/google";
 
 
 // ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
@@ -29,6 +30,27 @@ function AuthScreen({ onLogin, C }) {
   const handleGuestEntry = () => {
     onLogin({ name: "Guest Explorer", email: "guest@gradlaunch.ai" }, "demo-token");
   };
+
+  async function handleGoogleLogin(credentialResponse) {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/auth/google`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credential: credentialResponse.credential })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onLogin(data.user, data.token);
+      } else {
+        setError(data.error || "Google authentication failed");
+      }
+    } catch (err) {
+      setError("Server connection failed");
+    }
+    setLoading(false);
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -126,6 +148,18 @@ function AuthScreen({ onLogin, C }) {
             <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} />
             <span style={{ fontSize: 12, color: "#94A3B8" }}>OR</span>
             <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} />
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "center", borderRadius: 14, overflow: "hidden" }}>
+            <GoogleLogin
+              onSuccess={handleGoogleLogin}
+              onError={() => setError("Google Sign-In failed")}
+              theme="filled_black"
+              shape="pill"
+              size="large"
+              width="360"
+              text={isRegister ? "signup_with" : "signin_with"}
+            />
           </div>
 
           <button
