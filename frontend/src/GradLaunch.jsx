@@ -35,7 +35,8 @@ function AuthScreen({ onLogin, C }) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/auth/google`, {
+      const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+      const res = await fetch(`${apiBase}/api/auth/google`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ credential: credentialResponse.credential })
@@ -58,7 +59,8 @@ function AuthScreen({ onLogin, C }) {
     setError("");
     const endpoint = isRegister ? "register" : "login";
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/auth/${endpoint}`, {
+      const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+      const res = await fetch(`${apiBase}/api/auth/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form)
@@ -257,7 +259,7 @@ function GradLaunchContent() {
       const storedToken = localStorage.getItem("token");
       if (storedToken) {
         try {
-          const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
+          const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
           const res = await fetch(`${apiBase}/api/auth/me`, {
             headers: { "Authorization": `Bearer ${storedToken}` }
           });
@@ -296,7 +298,7 @@ function GradLaunchContent() {
   }
 
   async function handleAddToTracker(job) {
-    const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
+    const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
     const token = localStorage.getItem("token");
 
     const exists = applications.find(a => a.company === job.company && a.role === job.title);
@@ -337,7 +339,7 @@ function GradLaunchContent() {
   }
 
   async function handleToggleSave(job) {
-    const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
+    const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
     const token = localStorage.getItem("token");
     const isSaved = savedJobs.some(sj => sj.id === job.id);
 
