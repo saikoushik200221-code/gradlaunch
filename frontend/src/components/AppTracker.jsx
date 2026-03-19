@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { LogoCircle, EmptyState } from "./Common";
 import { TRACKER_STAGES, STAGE_COLORS } from "../theme";
 
+const STAGE_ICONS = { "Wishlist": "⭐", "Applied": "📤", "Phone Screen": "📞", "Interview": "🤝", "Offer 🎉": "🎉", "Rejected": "❌" };
+
 function AppDetailModal({ app, onClose, onUpdate, C }) {
     const [analysisText, setAnalysisText] = useState("");
     const [analyzing, setAnalyzing] = useState(false);
@@ -219,7 +221,8 @@ export default function AppTracker({ applications, setApplications, C }) {
             {/* Stats row */}
             <div style={{ display: "flex", gap: 10, flexShrink: 0, overflowX: "auto", paddingBottom: 4 }}>
                 {stats.map(({ stage, count }) => (
-                    <div key={stage} style={{ flex: 1, minWidth: 100, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 8px", textAlign: "center" }}>
+                    <div key={stage} style={{ flex: 1, minWidth: 100, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 8px", textAlign: "center", position: "relative" }}>
+                        <div style={{ position: "absolute", top: 8, right: 8, fontSize: 14 }}>{STAGE_ICONS[stage]}</div>
                         <div style={{ fontSize: 22, fontFamily: "'Syne', sans-serif", fontWeight: 800, color: STAGE_COLORS[stage] }}>{count}</div>
                         <div style={{ fontSize: 10, fontFamily: "'DM Sans', sans-serif", color: C.muted, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{stage}</div>
                     </div>

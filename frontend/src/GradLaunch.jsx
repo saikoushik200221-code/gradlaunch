@@ -93,6 +93,7 @@ function AuthScreen({ onLogin, C }) {
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {error && <div style={{ color: "#FF3B30", background: "rgba(255, 59, 48, 0.1)", border: "1px solid rgba(255, 59, 48, 0.3)", borderRadius: 12, padding: 12, fontSize: 13, textAlign: "center" }}>{error}</div>}
           {isRegister && (
             <input
               required
@@ -264,13 +265,19 @@ function GradLaunchContent() {
             const data = await res.json();
             setCurrentUser(data.user);
 
-            const [appRes, savedRes] = await Promise.all([
+            const [appRes, savedRes, profileRes] = await Promise.all([
               fetch(`${apiBase}/api/applications`, { headers: { "Authorization": `Bearer ${storedToken}` } }),
-              fetch(`${apiBase}/api/jobs/saved`, { headers: { "Authorization": `Bearer ${storedToken}` } })
+              fetch(`${apiBase}/api/jobs/saved`, { headers: { "Authorization": `Bearer ${storedToken}` } }),
+              fetch(`${apiBase}/api/profile`, { headers: { "Authorization": `Bearer ${storedToken}` } })
             ]);
 
             if (appRes.ok) setApplications(await appRes.json());
             if (savedRes.ok) setSavedJobs(await savedRes.json());
+            if (profileRes.ok) {
+              const pData = await profileRes.json();
+              if (pData.aiContext) setGlobalProfileContext(pData.aiContext);
+              if (pData.skills) setProfileText(`${pData.skills} ${pData.targetRole} ${pData.baseResume} ${pData.aiContext || ""}`);
+            }
           } else {
             localStorage.removeItem("token");
           }

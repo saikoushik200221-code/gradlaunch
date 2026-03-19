@@ -93,7 +93,7 @@ export default function Profile({ globalContext, setGlobalContext, setGlobalVect
             if (res.ok) {
                 const data = await res.json();
                 setSaved(true);
-                if (onProfileUpdate) onProfileUpdate(data.profile);
+                if (onProfileUpdate) onProfileUpdate(data);
                 setTimeout(() => setSaved(false), 3000);
             } else { setError("Failed to save changes"); }
         } catch (e) { setError("Server connection failed"); }

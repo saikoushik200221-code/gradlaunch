@@ -10,13 +10,21 @@ export default function ResumeTailor({ initialJobDesc, jobUrl, globalContext, C 
     const [keywords, setKeywords] = useState([]);
     const [error, setError] = useState("");
 
+    const [background, setBackground] = useState(globalContext || "");
+
+    useEffect(() => {
+        if (globalContext && (!background || background.trim() === "")) {
+            setBackground(globalContext);
+        }
+    }, [globalContext]);
+
     useEffect(() => {
         if (initialJobDesc) setJobDesc(initialJobDesc);
     }, [initialJobDesc]);
 
     async function tailorResume() {
-        if (!globalContext) {
-            setError("Please go to the Profile tab and click 'Analyze & Save Deep Profile' first!");
+        if (!background || background.trim() === "") {
+            setError("Please provide 'Your Background' before tailoring.");
             return;
         }
         setLoading(true);
@@ -53,7 +61,7 @@ ATS_SCORE: [A realistic number 0-100]
 KEYWORDS: [The 8-10 key JD terms you integrated, separated by commas]
 
 CANDIDATE'S DEEP CONTEXT PROFILE:
-${globalContext}
+${background}
 
 JOB DESCRIPTION:
 ${jobDesc}`
@@ -132,12 +140,27 @@ ${jobDesc}`
                     <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, margin: "0 0 8px 0" }}>Resume Tailor</h2>
                     <p style={{ color: C.muted, fontSize: 14, margin: "0 0 24px 0" }}>Paste a job description to instantly transform your resume into a top-tier candidate profile.</p>
 
+                    {(!background || background.trim() === "") && (
+                        <div style={{ color: C.yellow, background: `${C.yellow}11`, border: `1px solid ${C.yellow}33`, padding: 16, borderRadius: 12, fontSize: 13, marginBottom: 24 }}>
+                            ⚠️ Complete profile first: Please go to the Profile tab and click 'Analyze & Save Deep Profile', or manually paste your background below.
+                        </div>
+                    )}
+
+                    <div style={{ marginBottom: 24 }}>
+                        <label style={{ display: "block", fontSize: 12, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Your Background</label>
+                        <textarea
+                            value={background} onChange={e => setBackground(e.target.value)}
+                            placeholder="Paste your resume, skills, and experience here..."
+                            style={{ width: "100%", background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, color: C.text, fontFamily: "'DM Sans', sans-serif", fontSize: 14, minHeight: 150, resize: "none", outline: "none" }}
+                        />
+                    </div>
+
                     <div style={{ marginBottom: 24 }}>
                         <label style={{ display: "block", fontSize: 12, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Job Description</label>
                         <textarea
                             value={jobDesc} onChange={e => setJobDesc(e.target.value)}
                             placeholder="Paste the full job description here..."
-                            style={{ width: "100%", background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, color: C.text, fontFamily: "'DM Sans', sans-serif", fontSize: 14, minHeight: 300, resize: "none", outline: "none" }}
+                            style={{ width: "100%", background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, color: C.text, fontFamily: "'DM Sans', sans-serif", fontSize: 14, minHeight: 200, resize: "none", outline: "none" }}
                         />
                     </div>
 
@@ -145,7 +168,7 @@ ${jobDesc}`
 
                     <button
                         onClick={tailorResume}
-                        disabled={loading}
+                        disabled={loading || !background || background.trim() === ""}
                         style={{ width: "100%", background: C.accent, border: "none", borderRadius: 16, padding: "18px", color: "#000", fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 15, cursor: loading ? "wait" : "pointer", boxShadow: `0 8px 24px ${C.accent}33` }}
                     >
                         {loading ? "✨ AI is Reframing Your Story..." : "🚀 Generate Tailored Submission"}
