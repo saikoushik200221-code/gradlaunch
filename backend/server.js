@@ -163,6 +163,15 @@ async function initDb() {
     try { await db.exec(`ALTER TABLE users ADD COLUMN email_notifications TEXT DEFAULT 'none'`); } catch (e) { }
     // Migration: add interview_date column to applications
     try { await db.exec(`ALTER TABLE applications ADD COLUMN interview_date TEXT`); } catch (e) { }
+    // Ensure Guest User exists so demo-token works seamlessly across all endpoints
+    try {
+        await db.run('INSERT OR IGNORE INTO users (id, name, email, password, profile) VALUES (?, ?, ?, ?, ?)', [
+            '019cc699-8a01-7415-a644-724f93bf8067', 'Guest Explorer', 'guest@gradlaunch.ai', 'demo_no_password', null
+        ]);
+    } catch (e) {
+        console.log('[GradLaunch] Guest user init skipped', e.message);
+    }
+    
     console.log('[GradLaunch] Database initialized ✅');
 
     // Initialize mailer
