@@ -92,7 +92,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
         const matchSearch = !q || j.title.toLowerCase().includes(q) || j.company.toLowerCase().includes(q) || j.skills.some(s => s.toLowerCase().includes(q));
         const matchNG = !filters.newGrad || j.tags.includes("New Grad");
         const matchH1 = !filters.h1b || j.tags.includes("H1B Sponsor");
-        const matchOPT = !filters.opt || j.tags.includes("OPT Friendly");
+        const matchOPT = !filters.opt || j.tags.includes("OPT Accepted");
         const matchR = !filters.remote || j.tags.some(t => t.includes("Remote"));
         const matchOnsite = !filters.onsite || !j.tags.some(t => t.includes("Remote"));
         const matchF = !filters.fresher || j.tags.includes("Fresher Friendly");
@@ -231,7 +231,17 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                                     </div>
                                     <p style={{ color: C.muted, margin: "4px 0 12px 0", fontSize: 14 }}>{job.company} \u00B7 {job.location}</p>
                                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                        {job.tags.slice(0, 2).map(t => <TagBadge key={t} label={t} C={C} />)}
+                                        {job.tags.includes("OPT Accepted") && (
+                                            <span style={{ background: `${C.green}15`, color: C.green, padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, border: `1px solid ${C.green}33` }}>
+                                                🟢 OPT/CPT
+                                            </span>
+                                        )}
+                                        {job.tags.includes("H1B Sponsor") && (
+                                            <span style={{ background: `${C.purple}15`, color: C.purple, padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, border: `1px solid ${C.purple}33` }}>
+                                                🌐 H1B SPONSOR
+                                            </span>
+                                        )}
+                                        {job.tags.filter(t => t !== "OPT Accepted" && t !== "H1B Sponsor").slice(0, 2).map(t => <TagBadge key={t} label={t} C={C} />)}
                                         {job.salary_max >= 100000 && (
                                             <span style={{ background: `${C.green}15`, color: C.green, padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, border: `1px solid ${C.green}33` }}>
                                                 \uD83D\uDCB0 HIGH PAYING
@@ -265,7 +275,17 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                                 <MatchRing score={analysis?.score || selectedJob.match} C={C} />
                             </div>
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 20 }}>
-                                {selectedJob.tags.map(t => <TagBadge key={t} label={t} C={C} />)}
+                                        {selectedJob.tags.includes("OPT Accepted") && (
+                                            <span style={{ background: `${C.green}15`, color: C.green, padding: "4px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: `1px solid ${C.green}33` }}>
+                                                🟢 OPT/CPT Friendly
+                                            </span>
+                                        )}
+                                        {selectedJob.tags.includes("H1B Sponsor") && (
+                                            <span style={{ background: `${C.purple}15`, color: C.purple, padding: "4px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, border: `1px solid ${C.purple}33` }}>
+                                                🌐 H1B Sponsorship Available
+                                            </span>
+                                        )}
+                                {selectedJob.tags.filter(t => t !== "OPT Accepted" && t !== "H1B Sponsor").map(t => <TagBadge key={t} label={t} C={C} />)}
                             </div>
                         </div>
 

@@ -10,6 +10,13 @@ export default function ResumeTailor({ initialJobDesc, jobUrl, globalContext, C 
     const [keywords, setKeywords] = useState([]);
     const [error, setError] = useState("");
 
+    const [matchAnalysis, setMatchAnalysis] = useState(null);
+    const [analyzingMatch, setAnalyzingMatch] = useState(false);
+    
+    const [bullet, setBullet] = useState("");
+    const [improvedBullet, setImprovedBullet] = useState("");
+    const [improving, setImproving] = useState(false);
+
     const [background, setBackground] = useState(globalContext || "");
 
     useEffect(() => {
@@ -33,7 +40,8 @@ export default function ResumeTailor({ initialJobDesc, jobUrl, globalContext, C 
         setAtsScore(null);
         setKeywords([]);
         try {
-            const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/anthropic/messages`, {
+            const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+            const res = await fetch(`${apiBase}/api/anthropic/messages`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -41,29 +49,25 @@ export default function ResumeTailor({ initialJobDesc, jobUrl, globalContext, C 
                     max_tokens: 4000,
                     messages: [{
                         role: "user",
-                        content: `You are an elite professional resume writer. Your goal is to produce a FULL, COMPLETE, SUBMISSION-READY RESUME. Do NOT provide a summary or excerpts. Provide every single line from the header to the final section.
+                        content: `You are a FAANG recruiter. Rewrite the ENTIRE resume to fully match the job description. Do NOT provide excerpts.
             
-CORE INSTRUCTIONS:
-1. FULL REWRITE: Rewrite the ENTIRE resume based on the CANDIDATE'S DEEP CONTEXT PROFILE. Every section (Summary, Experience, Projects, Skills, Education) must be fully developed and tailored to the JOB DESCRIPTION.
-2. USE REAL DATA from CANDIDATE'S DEEP CONTEXT PROFILE as the sole source of truth.
-3. STRUCTURE & PARSING (CRITICAL):
-   - Line 1: [Full Name]
-   - Line 2: [Location | Email | Phone | LinkedIn]
-   - Each major section MUST start with "# " (e.g., # PROFESSIONAL SUMMARY, # WORK EXPERIENCE, # TECHNICAL PROJECTS, # EDUCATION, # SKILLS).
-4. CONTENT: Use high-impact action verbs and quantifiable metrics. Inject specific keywords from the JOB DESCRIPTION naturally.
+Rules:
+- Use strong action verbs.
+- Add relevant keywords from the JD naturally.
+- Use the STAR format for bullet points.
+- Keep it highly ATS-friendly.
+- Major sections MUST start with "# " (e.g. # PROFESSIONAL SUMMARY, # WORK EXPERIENCE, # TECHNICAL PROJECTS, # EDUCATION, # SKILLS).
 
-Format your response exactly as:
+Format exactly as:
 TAILORED_RESUME:
-[The COMPLETE revised resume here]
+[Complete revised resume here]
+ATS_SCORE: [Number 0-100]
+KEYWORDS: [Word, Word, Word]
 
-ATS_SCORE: [A realistic number 0-100]
-
-KEYWORDS: [The 8-10 key JD terms you integrated, separated by commas]
-
-CANDIDATE'S DEEP CONTEXT PROFILE:
+Resume:
 ${background}
 
-JOB DESCRIPTION:
+Job Description:
 ${jobDesc}`
                     }]
                 })
@@ -80,6 +84,47 @@ ${jobDesc}`
             setError("Failed to tailor resume: " + e.message);
         }
         setLoading(false);
+    }
+
+    async function analyzeDeepMatch() {
+        if (!background || background.trim() === "") { setError("Provide 'Your Background' first."); return; }
+        setAnalyzingMatch(true); setError(""); setMatchAnalysis(null);
+        try {
+            const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+            const res = await fetch(`${apiBase}/api/anthropic/messages`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    model: "claude-sonnet-4-20250514", max_tokens: 1000,
+                    messages: [{
+                        role: "user",
+                        content: `You are an expert recruiter.\nCompare the following resume and job description.\nReturn strictly JSON format ONLY without markdown:\n{\n  "score": 85,\n  "missing_skills": ["Skill1", "Skill2"],\n  "strengths": ["Strength1", "Strength2"],\n  "suggestions": ["Suggestion1", "Suggestion2"]\n}\n\nResume:\n${background}\n\nJob Description:\n${jobDesc}`
+                    }]
+                })
+            });
+            const data = await res.json();
+            const text = data.content?.[0]?.text || "";
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) setMatchAnalysis(JSON.parse(jsonMatch[0]));
+        } catch (e) { setError("Failed to analyze match."); }
+        setAnalyzingMatch(false);
+    }
+
+    async function improveBulletAction() {
+        if (!bullet) return;
+        setImproving(true);
+        try {
+            const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+            const res = await fetch(`${apiBase}/api/anthropic/messages`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    model: "claude-sonnet-4-20250514", max_tokens: 300,
+                    messages: [{ role: "user", content: `Improve this bullet point for impact and ATS. Make it quantified, action-driven, and specific.\nBullet: "${bullet}"\nJust return the improved bullet point.` }]
+                })
+            });
+            const data = await res.json();
+            setImprovedBullet(data.content?.[0]?.text || "");
+        } catch (e) { setImprovedBullet("Failed to improve bullet."); }
+        setImproving(false);
     }
 
     function downloadAsPDF() {
@@ -166,13 +211,22 @@ ${jobDesc}`
 
                     {error && <div style={{ color: C.red, background: `${C.red}11`, border: `1px solid ${C.red}33`, padding: 16, borderRadius: 12, fontSize: 13, marginBottom: 24 }}>{error}</div>}
 
-                    <button
-                        onClick={tailorResume}
-                        disabled={loading || !background || background.trim() === ""}
-                        style={{ width: "100%", background: C.accent, border: "none", borderRadius: 16, padding: "18px", color: "#000", fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 15, cursor: loading ? "wait" : "pointer", boxShadow: `0 8px 24px ${C.accent}33` }}
-                    >
-                        {loading ? "✨ AI is Reframing Your Story..." : "🚀 Generate Tailored Submission"}
-                    </button>
+                    <div style={{ display: "flex", gap: 16 }}>
+                        <button
+                            onClick={analyzeDeepMatch}
+                            disabled={analyzingMatch || !background || background.trim() === ""}
+                            style={{ flex: 1, background: "transparent", border: `1px solid ${C.accent}`, color: C.accent, borderRadius: 16, padding: "18px", fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 15, cursor: analyzingMatch ? "wait" : "pointer", transition: "all 0.2s" }}
+                        >
+                            {analyzingMatch ? "🔍 Analyzing Match..." : "🔍 Deep Match Analysis"}
+                        </button>
+                        <button
+                            onClick={tailorResume}
+                            disabled={loading || !background || background.trim() === ""}
+                            style={{ flex: 1, background: C.accent, border: "none", borderRadius: 16, padding: "18px", color: "#000", fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 15, cursor: loading ? "wait" : "pointer", boxShadow: `0 8px 24px ${C.accent}33` }}
+                        >
+                            {loading ? "✨ AI is Tailoring..." : "🚀 Tailor Resume"}
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -193,17 +247,49 @@ ${jobDesc}`
                     )}
                 </div>
 
-                <div style={{ flex: 1, padding: 32, overflowY: "auto", position: "relative" }}>
+                <div style={{ flex: 1, padding: 32, overflowY: "auto", position: "relative", display: "flex", flexDirection: "column", gap: 24 }}>
+                    {matchAnalysis && (
+                        <div style={{ background: C.bg === "#04060A" ? "#111827" : "#F8FAFC", border: `1px solid ${C.border}`, borderRadius: 16, padding: 24 }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+                                <h3 style={{ margin: 0, fontFamily: "'Syne', sans-serif", fontSize: 16, color: C.text }}>Match Analysis</h3>
+                                <div style={{ background: `${C.accent}20`, color: C.accent, padding: "4px 12px", borderRadius: 20, fontSize: 13, fontWeight: 800, border: `1px solid ${C.accent}40` }}>{matchAnalysis.score}% FIT</div>
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                                <div>
+                                    <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Missing Skills</div>
+                                    {matchAnalysis.missing_skills?.map((s, idx) => <div key={idx} style={{ color: C.text, fontSize: 13, marginBottom: 4 }}>• {s}</div>)}
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Key Strengths</div>
+                                    {matchAnalysis.strengths?.map((s, idx) => <div key={idx} style={{ color: C.green, fontSize: 13, marginBottom: 4 }}>• {s}</div>)}
+                                </div>
+                            </div>
+                            <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
+                                <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Improvement Suggestions</div>
+                                {matchAnalysis.suggestions?.map((s, idx) => <div key={idx} style={{ color: C.text, fontSize: 13, marginBottom: 4 }}>• {s}</div>)}
+                            </div>
+                        </div>
+                    )}
+
                     {tailored ? (
                         <div style={{ whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: 13, lineHeight: 1.6, color: C.text }}>{tailored}</div>
                     ) : (
                         <EmptyState
                             icon="✨"
-                            title="Ready to Tailor"
-                            description="Orion's tailored resume will appear here. It will be submission-ready and ATS-optimized."
+                            title="Ready to Analyze & Tailor"
+                            description="Your deep match analysis and newly tailored resume will appear securely here."
                             C={C}
                         />
                     )}
+                </div>
+                
+                <div style={{ padding: 24, borderTop: `1px solid ${C.border}`, background: C.surface }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: C.text, marginBottom: 8, fontFamily: "'Syne', sans-serif" }}>⚡ Bullet Point Improver</div>
+                    <div style={{ display: "flex", gap: 12 }}>
+                        <input value={bullet} onChange={e => setBullet(e.target.value)} placeholder="Paste a weak bullet point..." style={{ flex: 1, background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", color: C.text, fontFamily: "'DM Sans', sans-serif", fontSize: 13, outline: "none" }} />
+                        <button onClick={improveBulletAction} disabled={improving || !bullet} style={{ background: C.accent, color: "#000", border: "none", borderRadius: 10, padding: "0 16px", fontWeight: 800, fontSize: 13, cursor: improving ? "wait" : "pointer" }}>{improving ? "Improving..." : "Improve"}</button>
+                    </div>
+                    {improvedBullet && <div style={{ marginTop: 12, background: `${C.green}11`, padding: 12, borderRadius: 8, fontSize: 13, color: C.green, border: `1px solid ${C.green}33` }}>{improvedBullet}</div>}
                 </div>
 
                 {keywords.length > 0 && (
