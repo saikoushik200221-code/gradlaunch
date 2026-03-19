@@ -44,9 +44,54 @@ const ChartBar = ({ label, value, max, color, C }) => {
     );
 };
 
-export default function Dashboard({ C }) {
+export default function Dashboard({ C, savedJobs, profileText }) {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [strategy, setStrategy] = useState("");
+    const [generatingStrategy, setGeneratingStrategy] = useState(false);
+
+    const getTopMissingSkills = () => {
+        if (!savedJobs || savedJobs.length === 0 || !profileText) return [];
+        const userSkills = profileText.toLowerCase();
+        const counts = {};
+        
+        savedJobs.forEach(job => {
+            if (job.skills) {
+                job.skills.forEach(skill => {
+                    if (!userSkills.includes(skill.toLowerCase())) {
+                        counts[skill] = (counts[skill] || 0) + 1;
+                    }
+                });
+            }
+        });
+
+        return Object.entries(counts)
+            .sort((a,b) => b[1] - a[1])
+            .slice(0, 3)
+            .map(([skill]) => skill);
+    };
+
+    const topMissing = getTopMissingSkills();
+
+    const generateSkillStrategy = async () => {
+        if (topMissing.length === 0) return;
+        setGeneratingStrategy(true);
+        try {
+            const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+            const res = await fetch(`${apiBase}/api/anthropic/messages`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    model: "claude-sonnet-4-20250514", max_tokens: 400,
+                    messages: [{ role: "user", content: `I am missing these top 3 skills needed for jobs I want: ${topMissing.join(', ')}. Give me exactly 3 highly actionable, very concise bullet points on how to quickly learn them to secure interviews.` }]
+                })
+            });
+            const d = await res.json();
+            setStrategy(d.content?.[0]?.text || "Failed to generate strategy.");
+        } catch (e) {
+            setStrategy("Failed to reach AI advisor.");
+        }
+        setGeneratingStrategy(false);
+    };
 
     useEffect(() => {
         async function fetchAnalytics() {
@@ -165,27 +210,46 @@ export default function Dashboard({ C }) {
                 </div>
             </div>
 
-            {/* Smart Insights */}
+            {/* Skill Gap Intelligence */}
             <div style={{
                 background: `linear-gradient(135deg, ${C.surface}, ${C.bg})`,
                 border: `1px solid ${C.accent}33`,
                 borderRadius: 32,
                 padding: 32,
                 display: "flex",
-                gap: 32,
-                alignItems: "center"
+                flexDirection: "column",
+                gap: 24
             }}>
-                <div style={{ width: 80, height: 80, borderRadius: 24, background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, boxShadow: `0 10px 30px ${C.accent}33` }}>🤖</div>
-                <div>
-                    <h3 style={{ margin: "0 0 8px 0", fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800 }}>Orion Strategy Advisor</h3>
-                    <p style={{ margin: 0, color: C.text, fontSize: 15, opacity: 0.9 }}>
-                        {s.total < 5 ?
-                            "Welcome to GradLaunch! Apply to at least 10 jobs to unlock customized success strategy insights." :
-                            s.successRate < 5 ?
-                                "Your application volume is good, but conversion to interviews is low. Try using the 'Resume Tailor' more often to boost your match scores." :
-                                "Great job! Your funnel is healthy. Focus on 'Interview Prep' in the Copilot tab to close the gap on your next offer."
-                        }
-                    </p>
+                <div style={{ display: "flex", gap: 32, alignItems: "flex-start" }}>
+                    <div style={{ width: 80, height: 80, borderRadius: 24, background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, boxShadow: `0 10px 30px ${C.accent}33`, flexShrink: 0 }}>🧠</div>
+                    <div style={{ flex: 1 }}>
+                        <h3 style={{ margin: "0 0 8px 0", fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800 }}>Skill Gap Intelligence</h3>
+                        
+                        {!savedJobs || savedJobs.length === 0 ? (
+                            <p style={{ margin: 0, color: C.muted, fontSize: 15 }}>Save some jobs in the Job Search tab to discover which critical skills the market demands but your profile is currently missing!</p>
+                        ) : topMissing.length === 0 ? (
+                            <p style={{ margin: 0, color: C.green, fontSize: 15, fontWeight: 700 }}>You are a perfect match for all your {savedJobs.length} saved jobs! Your profile text covers all required technical skills.</p>
+                        ) : (
+                            <div>
+                                <p style={{ margin: "0 0 12px 0", color: C.text, fontSize: 15 }}>Based on analyzing your {savedJobs.length} saved jobs, your profile is consistently missing these top requirements:</p>
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+                                    {topMissing.map(skill => (
+                                        <span key={skill} style={{ background: `${C.yellow}15`, color: C.yellow, padding: "6px 16px", borderRadius: 12, fontWeight: 800, fontSize: 14, border: `1px solid ${C.yellow}40` }}>{skill}</span>
+                                    ))}
+                                </div>
+                                {!strategy ? (
+                                    <button onClick={generateSkillStrategy} disabled={generatingStrategy} style={{ background: C.accent, color: "#000", border: "none", borderRadius: 12, padding: "10px 20px", fontWeight: 800, fontSize: 14, cursor: generatingStrategy ? "wait" : "pointer" }}>
+                                        {generatingStrategy ? "Orion is calculating strategy..." : "✨ Ask Orion for a Learning Strategy"}
+                                    </button>
+                                ) : (
+                                    <div style={{ background: `${C.accent}10`, border: `1px solid ${C.accent}30`, borderRadius: 16, padding: 20, color: C.text, fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                                        <div style={{ fontWeight: 800, color: C.accent, marginBottom: 8, textTransform: "uppercase", fontSize: 11, letterSpacing: 1 }}>Orion's Action Plan</div>
+                                        {strategy}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

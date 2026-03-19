@@ -476,7 +476,7 @@ function GradLaunchContent() {
           <main style={{ flex: 1, padding: 24, overflowY: "auto" }}>
             <div style={{ maxWidth: 1200, margin: "0 auto", animation: "fadeIn 0.3s ease-out" }}>
               <Routes>
-                <Route path="/" element={<Dashboard C={C} />} />
+                <Route path="/" element={<Dashboard C={C} savedJobs={savedJobs} profileText={profileText} />} />
                 <Route path="/jobs" element={<JobSearch onAddToTracker={handleAddToTracker} onToggleSave={handleToggleSave} savedJobs={savedJobs} profileText={profileText} C={C} />} />
                 <Route path="/job/:id" element={<JobView C={C} onAddToTracker={handleAddToTracker} savedJobs={savedJobs} />} />
                 <Route path="/copilot" element={<Copilot C={C} />} />
