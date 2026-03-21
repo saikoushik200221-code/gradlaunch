@@ -18,12 +18,13 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
     const [loadingJobs, setLoadingJobs] = useState(false);
     const [showSavedOnly, setShowSavedOnly] = useState(false);
     const [retryCount, setRetryCount] = useState(0);
+    const [lastUpdated, setLastUpdated] = useState(null);
 
     useEffect(() => {
         let retryTimer = null;
 
-        async function fetchJobs() {
-            setLoadingJobs(true);
+        async function fetchJobs(silent = false) {
+            if (!silent) setLoadingJobs(true);
             try {
                 const params = new URLSearchParams();
                 if (search) params.append("q", search);
@@ -34,6 +35,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                 if (res.ok) {
                     const data = await res.json();
                     setJobs(data || []);
+                    setLastUpdated(new Date());
                     // If no jobs returned (DB empty on first boot), retry in 10s
                     if (!data || data.length === 0) {
                         retryTimer = setTimeout(() => setRetryCount(c => c + 1), 10000);
@@ -43,10 +45,12 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                 console.warn("Could not connect to backend.", e);
                 retryTimer = setTimeout(() => setRetryCount(c => c + 1), 15000);
             }
-            setLoadingJobs(false);
+            if (!silent) setLoadingJobs(false);
         }
-        const debounce = setTimeout(fetchJobs, 300);
-        return () => { clearTimeout(debounce); if (retryTimer) clearTimeout(retryTimer); };
+        const debounce = setTimeout(() => fetchJobs(false), 300);
+        // Auto-refresh every 10 minutes silently (no loading spinner)
+        const autoRefresh = setInterval(() => fetchJobs(true), 10 * 60 * 1000);
+        return () => { clearTimeout(debounce); clearInterval(autoRefresh); if (retryTimer) clearTimeout(retryTimer); };
     }, [search, filters.remote, filters.newGrad, retryCount]);
 
     useEffect(() => {
@@ -187,6 +191,15 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                 </div>
 
                 <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, paddingRight: 4 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 11, color: C.muted, marginBottom: 4 }}>
+                        <span>{scored.length} jobs found {lastUpdated && `· Updated ${lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}</span>
+                        <button
+                            onClick={() => setRetryCount(c => c + 1)}
+                            style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 8, padding: "3px 10px", color: C.accent, fontSize: 11, cursor: "pointer", fontWeight: 600 }}
+                        >
+                            🔄 Refresh
+                        </button>
+                    </div>
                     {loadingJobs && [1, 2, 3, 4, 5].map(i => <SkeletonCard key={i} C={C} />)}
 
                     {!loadingJobs && scored.length === 0 && (

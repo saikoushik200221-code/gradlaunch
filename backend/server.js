@@ -814,7 +814,7 @@ async function scrapeWWR() {
                         tags: generateTags(title, description, 'Remote', true),
                         logo: (title.split(' at ')[1] || 'R').charAt(0).toUpperCase(),
                         match: getMatchScore(title),
-                        description: description.length > 500 ? description.slice(0, 500).trim() + '...' : description.trim(),
+                        description: description.length > 3000 ? description.slice(0, 3000).trim() + '...' : description.trim(),
                         skills: extractSkills(title, description),
                         link
                     });
@@ -855,7 +855,7 @@ async function scrapeWWR() {
                     tags: generateTags(title, cleanDesc, region),
                     logo: company.charAt(0).toUpperCase(),
                     match: getMatchScore(title),
-                    description: cleanDesc ? (cleanDesc.length > 500 ? cleanDesc.slice(0, 500).trim() + '...' : cleanDesc.trim()) : `Remote role at ${company}.`,
+                    description: cleanDesc ? (cleanDesc.length > 3000 ? cleanDesc.slice(0, 3000).trim() + '...' : cleanDesc.trim()) : `Remote role at ${company}.`,
                     skills: extractSkills(title, cleanDesc),
                     link,
                 });
@@ -891,7 +891,7 @@ async function scrapeArbeitnow() {
                         tags: generateTags(title, description, location, isRemote),
                         logo: (company || 'A').charAt(0).toUpperCase(),
                         match: getMatchScore(title),
-                        description: description.length > 500 ? description.slice(0, 500).trim() + '...' : description.trim(),
+                        description: description.length > 3000 ? description.slice(0, 3000).trim() + '...' : description.trim(),
                         skills: extractSkills(title, description),
                         link: item.url,
                     });
@@ -1015,7 +1015,7 @@ async function scrapeHN() {
                     tags: generateTags(cleanTitle, cleanDesc, 'United States', cleanTitle.toLowerCase().includes('remote')),
                     logo: 'H',
                     match: getMatchScore(cleanTitle),
-                    description: cleanDesc.length > 500 ? cleanDesc.slice(0, 500).trim() + '...' : cleanDesc.trim() || cleanTitle,
+                    description: cleanDesc.length > 3000 ? cleanDesc.slice(0, 3000).trim() + '...' : cleanDesc.trim() || cleanTitle,
                     skills: extractSkills(cleanTitle, cleanDesc),
                     link: item.url || `https://news.ycombinator.com/item?id=${item.objectID}`,
                 });
@@ -1099,9 +1099,9 @@ async function runJobScraper() {
     }
 }
 
-// Start the first scrape after a short delay, then every 20 minutes
+// Start the first scrape after a short delay, then every 10 minutes
 setTimeout(runJobScraper, 5000);
-setInterval(runJobScraper, 20 * 60 * 1000);
+setInterval(runJobScraper, 10 * 60 * 1000);
 
 // [Phase 9] Interview Reminder Cron - Runs daily at 8 AM
 cron.schedule('0 8 * * *', async () => {
