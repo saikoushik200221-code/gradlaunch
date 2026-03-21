@@ -10,6 +10,8 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
     const isSaved = (jobId) => savedJobs?.some(sj => sj.id === jobId);
     const [search, setSearch] = useState("");
     const [filters, setFilters] = useState({ newGrad: false, h1b: false, opt: false, remote: false, onsite: false, fresher: false });
+    const [roleFilter, setRoleFilter] = useState("All");
+    const [expFilter, setExpFilter] = useState("All");
     const [selectedJob, setSelectedJob] = useState(null);
     const [analysis, setAnalysis] = useState(null);
     const [analyzing, setAnalyzing] = useState(false);
@@ -91,9 +93,25 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
 
     const baseJobs = showSavedOnly ? savedJobs : jobs;
 
+    const ROLE_KEYWORDS = {
+        "SDE": ["software", "engineer", "developer", "backend", "frontend", "fullstack", "full-stack", "swe"],
+        "Data": ["data", "analyst", "analytics", "bi ", "business intelligence", "sql"],
+        "AI/ML": ["machine learning", "ai ", "deep learning", "nlp", "computer vision", "data scientist", "ml "],
+        "PM": ["product manager", "program manager", " pm ", "apm ", "tpm"],
+        "Design": ["design", "ux", "ui ", "figma", "product design"]
+    };
+
+    const EXP_KEYWORDS = {
+        "Intern": ["intern", "internship", "co-op", "coop"],
+        "Entry": ["entry", "junior", "new grad", "associate", "fresher", "early career"],
+        "Mid": ["mid", "ii ", "iii ", "2-", "3-", "4-"],
+        "Senior": ["senior", "staff", "lead", "principal", "sr."]
+    };
+
     const filtered = baseJobs.filter(j => {
         const q = search.toLowerCase();
-        const matchSearch = !q || j.title.toLowerCase().includes(q) || j.company.toLowerCase().includes(q) || j.skills.some(s => s.toLowerCase().includes(q));
+        const titleLower = j.title.toLowerCase();
+        const matchSearch = !q || titleLower.includes(q) || j.company.toLowerCase().includes(q) || j.skills.some(s => s.toLowerCase().includes(q));
         const matchNG = !filters.newGrad || j.tags.includes("New Grad");
         const matchH1 = !filters.h1b || j.tags.includes("H1B Sponsor");
         const matchOPT = !filters.opt || j.tags.includes("OPT Accepted");
@@ -106,11 +124,14 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
         if (filter === "Remote") categoryMatch = j.tags.includes("Remote");
         if (filter === "US Only") categoryMatch = j.location.includes("US");
 
-        return matchSearch && matchNG && matchH1 && matchOPT && matchR && matchOnsite && matchF && categoryMatch;
+        const matchRole = roleFilter === "All" || ROLE_KEYWORDS[roleFilter]?.some(kw => titleLower.includes(kw));
+        const matchExp = expFilter === "All" || EXP_KEYWORDS[expFilter]?.some(kw => titleLower.includes(kw));
+
+        return matchSearch && matchNG && matchH1 && matchOPT && matchR && matchOnsite && matchF && categoryMatch && matchRole && matchExp;
     });
 
     const scored = profileText
-        ? computeSemanticScores(profileText, filtered)
+        ? [...computeSemanticScores(profileText, filtered)].sort((a, b) => (b.match || 0) - (a.match || 0))
         : filtered;
 
     return (
@@ -162,13 +183,14 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                     </button>
                 </div>
 
+                {/* Visa/Job Type filters */}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                     {[
-                        ["newGrad", "\uD83C\uDF93 New Grad"],
-                        ["h1b", "\uD83C\uDF10 H1B"],
-                        ["opt", "\uD83D\uDCCB OPT"],
-                        ["remote", "\uD83C\uDFE0 Remote"],
-                        ["fresher", "\u2728 Fresher"],
+                        ["newGrad", "🎓 New Grad"],
+                        ["h1b", "🌐 H1B"],
+                        ["opt", "📋 OPT"],
+                        ["remote", "🏠 Remote"],
+                        ["fresher", "✨ Fresher"],
                     ].map(([key, label]) => (
                         <button
                             key={key}
@@ -186,6 +208,54 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                             }}
                         >
                             {label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Role Category filters */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    <span style={{ fontSize: 11, color: C.muted, alignSelf: "center", fontWeight: 600, marginRight: 4 }}>ROLE</span>
+                    {["All", "SDE", "Data", "AI/ML", "PM", "Design"].map(r => (
+                        <button
+                            key={r}
+                            onClick={() => setRoleFilter(r)}
+                            style={{
+                                background: roleFilter === r ? `${C.purple}22` : C.card,
+                                border: `1px solid ${roleFilter === r ? C.purple : C.border}`,
+                                color: roleFilter === r ? C.purple : C.muted,
+                                padding: "5px 11px",
+                                borderRadius: "20px",
+                                fontSize: 11,
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                transition: "all 0.2s"
+                            }}
+                        >
+                            {r}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Experience Level filters */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    <span style={{ fontSize: 11, color: C.muted, alignSelf: "center", fontWeight: 600, marginRight: 4 }}>EXP</span>
+                    {["All", "Intern", "Entry", "Mid", "Senior"].map(e => (
+                        <button
+                            key={e}
+                            onClick={() => setExpFilter(e)}
+                            style={{
+                                background: expFilter === e ? `${C.green}22` : C.card,
+                                border: `1px solid ${expFilter === e ? C.green : C.border}`,
+                                color: expFilter === e ? C.green : C.muted,
+                                padding: "5px 11px",
+                                borderRadius: "20px",
+                                fontSize: 11,
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                transition: "all 0.2s"
+                            }}
+                        >
+                            {e}
                         </button>
                     ))}
                 </div>

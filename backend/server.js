@@ -692,6 +692,49 @@ function deduplicateJobs(jobs, existingJobs = []) {
 const ADZUNA_APP_ID = process.env.ADZUNA_APP_ID || '';
 const ADZUNA_APP_KEY = process.env.ADZUNA_APP_KEY || '';
 const FINDWORK_API_KEY = process.env.FINDWORK_API_KEY || '';
+const JOOBLE_API_KEY = process.env.JOOBLE_API_KEY || '';
+
+async function scrapeJooble() {
+    if (!JOOBLE_API_KEY) return [];
+    const jobs = [];
+    const queries = ['software developer', 'data scientist', 'machine learning engineer'];
+    try {
+        console.log('[GradLaunch] Fetching from Jooble API...');
+        for (const query of queries) {
+            const { data } = await axios.post(
+                `https://jooble.org/api/${JOOBLE_API_KEY}`,
+                { keywords: query, location: 'United States', resultonpage: 20 },
+                { headers: { 'Content-Type': 'application/json' }, timeout: 15000 }
+            );
+            if (data && data.jobs) {
+                data.jobs.forEach((item, i) => {
+                    const desc = item.snippet?.replace(/<[^>]*>?/gm, ' ') || '';
+                    jobs.push({
+                        id: `jb-${item.id || Date.now() + i}`,
+                        title: item.title,
+                        company: item.company,
+                        location: item.location || 'USA',
+                        type: item.type || 'Full-time',
+                        postedValue: new Date(item.updated).getTime() || Date.now(),
+                        posted: getPostedTime(item.updated),
+                        salary: item.salary || 'Competitive',
+                        tags: generateTags(item.title, desc, item.location || 'USA'),
+                        logo: (item.company || 'J').charAt(0).toUpperCase(),
+                        match: getMatchScore(item.title),
+                        description: desc.length > 3000 ? desc.slice(0, 3000).trim() + '...' : desc.trim(),
+                        skills: extractSkills(item.title, desc),
+                        link: item.link,
+                        source: 'Jooble',
+                    });
+                });
+            }
+        }
+    } catch (err) {
+        console.warn(`Jooble fetch failed: ${err.message}`);
+    }
+    return jobs;
+}
+
 
 async function scrapeAdzuna() {
     if (!ADZUNA_APP_ID || !ADZUNA_APP_KEY) return [];
@@ -1034,17 +1077,18 @@ async function runJobScraper() {
     isScraping = true;
     console.log('[GradLaunch] Starting background scraping cycle...');
     try {
-        const [wwrJobs, anJobs, remotiveJobs, jobicyJobs, hnJobs, adzunaJobs, findworkJobs] = await Promise.all([
+        const [wwrJobs, anJobs, remotiveJobs, jobicyJobs, hnJobs, adzunaJobs, findworkJobs, joobleJobs] = await Promise.all([
             scrapeWWR(),
             scrapeArbeitnow(),
             scrapeRemotive(),
             scrapeJobicy(),
             scrapeHN(),
             scrapeAdzuna(),
-            scrapeFindwork()
+            scrapeFindwork(),
+            scrapeJooble()
         ]);
 
-        const rawJobs = [...wwrJobs, ...anJobs, ...remotiveJobs, ...jobicyJobs, ...hnJobs, ...adzunaJobs, ...findworkJobs];
+        const rawJobs = [...wwrJobs, ...anJobs, ...remotiveJobs, ...jobicyJobs, ...hnJobs, ...adzunaJobs, ...findworkJobs, ...joobleJobs];
         console.log(`[GradLaunch] Raw total found: ${rawJobs.length}`);
 
         // Get existing IDs and minimal data for deduplication
