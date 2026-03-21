@@ -72,7 +72,14 @@ function AppDetailModal({ app, onClose, onUpdate, C }) {
                             <h2 style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 24, margin: 0 }}>{app.company}</h2>
                             <div style={{ fontFamily: "'DM Sans', sans-serif", color: C.muted, fontSize: 16 }}>{app.role}</div>
                         </div>
-                        <div style={{ marginLeft: "auto", background: `${STAGE_COLORS[app.stage]}15`, color: STAGE_COLORS[app.stage], padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 700, border: `1px solid ${STAGE_COLORS[app.stage]}33` }}>{app.stage}</div>
+                        <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
+                            {app.job_link && (
+                                <button onClick={() => window.open(app.job_link, "_blank")} style={{ background: "transparent", border: `1px solid ${C.accent}`, color: C.accent, padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                                    View Posting
+                                </button>
+                            )}
+                            <div style={{ background: `${STAGE_COLORS[app.stage]}15`, color: STAGE_COLORS[app.stage], padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 700, border: `1px solid ${STAGE_COLORS[app.stage]}33` }}>{app.stage}</div>
+                        </div>
                     </div>
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>

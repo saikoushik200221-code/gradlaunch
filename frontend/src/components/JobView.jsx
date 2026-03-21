@@ -125,6 +125,14 @@ export default function JobView({ C, onAddToTracker }) {
                 >
                     Bookmark Job
                 </button>
+                {job.link && (
+                    <button
+                        onClick={() => window.open(job.link, "_blank")}
+                        style={{ flex: 1, background: "transparent", border: `1px solid ${C.accent}`, color: C.accent, padding: "16px", borderRadius: 14, fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, cursor: "pointer", transition: "all 0.2s" }}
+                    >
+                        View Job Application
+                    </button>
+                )}
                 <button
                     onClick={() => {
                         onAddToTracker({ ...job, match: analysis?.score || job.match || 85 });

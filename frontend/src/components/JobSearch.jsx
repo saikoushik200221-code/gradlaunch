@@ -329,6 +329,14 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                             >
                                 Bookmark Job
                             </button>
+                            {selectedJob.link && (
+                                <button
+                                    onClick={() => window.open(selectedJob.link, "_blank")}
+                                    style={{ flex: 1, background: "transparent", border: `1px solid ${C.accent}`, color: C.accent, padding: "16px", borderRadius: 14, fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, cursor: "pointer", transition: "all 0.2s" }}
+                                >
+                                    View Job Application
+                                </button>
+                            )}
                             <button
                                 onClick={() => onAddToTracker({ ...selectedJob, match: analysis?.score || selectedJob.match || 85 })}
                                 style={{ flex: 1, background: C.accent, border: "none", color: "#000", padding: "16px", borderRadius: 14, fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 15, cursor: "pointer", transition: "all 0.2s", boxShadow: `0 8px 24px ${C.accent}33` }}
