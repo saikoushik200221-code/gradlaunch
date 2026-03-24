@@ -694,6 +694,93 @@ const ADZUNA_APP_KEY = process.env.ADZUNA_APP_KEY || '';
 const FINDWORK_API_KEY = process.env.FINDWORK_API_KEY || '';
 const JOOBLE_API_KEY = process.env.JOOBLE_API_KEY || '';
 const CAREERJET_AFFID = process.env.CAREERJET_AFFID || '';
+const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
+const USAJOBS_KEY = process.env.USAJOBS_KEY || '';
+const USAJOBS_EMAIL = process.env.USAJOBS_EMAIL || 'admin@gradlaunch.ai';
+
+async function scrapeJSearch() {
+    if (!RAPIDAPI_KEY) return [];
+    const jobs = [];
+    try {
+        console.log('[GradLaunch] Fetching from JSearch (RapidAPI)...');
+        const { data } = await axios.get('https://jsearch.p.rapidapi.com/search', {
+            params: { query: 'software developer intern in USA', num_pages: 1 },
+            headers: { 'X-RapidAPI-Key': RAPIDAPI_KEY, 'X-RapidAPI-Host': 'jsearch.p.rapidapi.com' },
+            timeout: 15000
+        });
+        
+        if (data && data.data) {
+            data.data.forEach((item, i) => {
+                const desc = item.job_description || '';
+                jobs.push({
+                    id: `js-${item.job_id || Date.now() + i}`,
+                    title: item.job_title,
+                    company: item.employer_name,
+                    location: `${item.job_city || ''}, ${item.job_state || ''} ${item.job_country || ''}`.trim() || 'USA',
+                    type: item.job_employment_type || 'Full-time',
+                    postedValue: new Date(item.job_posted_at_datetime_utc).getTime() || Date.now(),
+                    posted: getPostedTime(item.job_posted_at_datetime_utc),
+                    salary: item.job_salary_period ? `${item.job_min_salary || ''} - ${item.job_max_salary || ''} ${item.job_salary_currency || ''}` : 'Competitive',
+                    tags: generateTags(item.job_title, desc, item.job_country || 'USA'),
+                    logo: item.employer_logo || (item.employer_name || 'J').charAt(0).toUpperCase(),
+                    match: getMatchScore(item.job_title),
+                    description: desc.length > 3000 ? desc.slice(0, 3000).trim() + '...' : desc.trim(),
+                    skills: extractSkills(item.job_title, desc),
+                    link: item.job_apply_link || item.job_google_link,
+                    source: 'JSearch',
+                });
+            });
+        }
+    } catch (err) {
+        console.warn(`JSearch fetch failed: ${err.message}`);
+    }
+    return jobs;
+}
+
+async function scrapeUSAJobs() {
+    if (!USAJOBS_KEY) return [];
+    const jobs = [];
+    try {
+        console.log('[GradLaunch] Fetching from USAJOBS API...');
+        const { data } = await axios.get('https://data.usajobs.gov/api/search', {
+            params: { Keyword: 'Software Development', LocationName: 'United States' },
+            headers: { 
+                'Authorization-Key': USAJOBS_KEY, 
+                'User-Agent': USAJOBS_EMAIL,
+                'Host': 'data.usajobs.gov'
+            },
+            timeout: 15000
+        });
+        
+        if (data && data.SearchResult && data.SearchResult.SearchResultItems) {
+            data.SearchResult.SearchResultItems.forEach((item, i) => {
+                const b = item.MatchedObjectDescriptor;
+                const desc = b.UserArea?.Details?.JobSummary || '';
+                jobs.push({
+                    id: `usj-${b.PositionID || Date.now() + i}`,
+                    title: b.PositionTitle,
+                    company: b.OrganizationName,
+                    location: b.PositionLocation?.map(l => l.LocationName).join(', ') || 'USA',
+                    type: b.PositionSchedule?.map(s => s.Name).join(', ') || 'Full-time',
+                    postedValue: new Date(b.PublicationStartDate).getTime() || Date.now(),
+                    posted: getPostedTime(b.PublicationStartDate),
+                    salary: `${b.PositionRemuneration?.[0]?.MinimumRange || ''} - ${b.PositionRemuneration?.[0]?.MaximumRange || ''}`,
+                    tags: generateTags(b.PositionTitle, desc, 'USA'),
+                    logo: '🏛️',
+                    match: getMatchScore(b.PositionTitle),
+                    description: desc.length > 3000 ? desc.slice(0, 3000).trim() + '...' : desc.trim(),
+                    skills: extractSkills(b.PositionTitle, desc),
+                    link: b.PositionURI,
+                    source: 'USAJOBS',
+                });
+            });
+        }
+    } catch (err) {
+        console.warn(`USAJOBS fetch failed: ${err.message}`);
+    }
+    return jobs;
+}
+
 
 async function scrapeCareerjet() {
     if (!CAREERJET_AFFID) return [];
@@ -1117,7 +1204,7 @@ async function runJobScraper() {
     isScraping = true;
     console.log('[GradLaunch] Starting background scraping cycle...');
     try {
-        const [wwrJobs, anJobs, remotiveJobs, jobicyJobs, hnJobs, adzunaJobs, findworkJobs, joobleJobs, cjJobs] = await Promise.all([
+        const [wwrJobs, anJobs, remotiveJobs, jobicyJobs, hnJobs, adzunaJobs, findworkJobs, joobleJobs, cjJobs, jsJobs, usjJobs] = await Promise.all([
             scrapeWWR(),
             scrapeArbeitnow(),
             scrapeRemotive(),
@@ -1126,10 +1213,12 @@ async function runJobScraper() {
             scrapeAdzuna(),
             scrapeFindwork(),
             scrapeJooble(),
-            scrapeCareerjet()
+            scrapeCareerjet(),
+            scrapeJSearch(),
+            scrapeUSAJobs()
         ]);
 
-        const rawJobs = [...wwrJobs, ...anJobs, ...remotiveJobs, ...jobicyJobs, ...hnJobs, ...adzunaJobs, ...findworkJobs, ...joobleJobs, ...cjJobs];
+        const rawJobs = [...wwrJobs, ...anJobs, ...remotiveJobs, ...jobicyJobs, ...hnJobs, ...adzunaJobs, ...findworkJobs, ...joobleJobs, ...cjJobs, ...jsJobs, ...usjJobs];
         console.log(`[GradLaunch] Raw total found: ${rawJobs.length}`);
 
         // Get existing IDs and minimal data for deduplication
