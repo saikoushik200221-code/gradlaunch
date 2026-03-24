@@ -1238,6 +1238,59 @@ app.get('/api/jobs/:id', async (req, res) => {
 });
 
 
+// ─── AI TOOL DEFINITIONS ───────────────────────────────────────────────────
+const TOOLS_DEFINITION = [
+    {
+        function_declarations: [
+            {
+                name: "search_jobs",
+                description: "Search current job listings by keywords (title, skills, or company) and location.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        query: { type: "string", description: "Search term like 'python developer' or 'data scientist'" },
+                        location: { type: "string", description: "Preferred location like 'New York' or 'Remote'" },
+                        limit: { type: "number", description: "Max number of jobs to return (default 5)" }
+                    },
+                    required: ["query"]
+                }
+            }
+        ]
+    }
+];
+
+async function handleToolCall(call) {
+    if (call.name === "search_jobs") {
+        const { query, location, limit = 5 } = call.args;
+        console.log(`[Orion] Tool Search: "${query}" in "${location || 'Anywhere'}"`);
+        
+        try {
+            let sql = "SELECT title, company, location, link, id, tags, skills FROM jobs WHERE (title LIKE ? OR company LIKE ? OR skills LIKE ?)";
+            let params = [`%${query}%`, `%${query}%`, `%${query}%`];
+            
+            if (location) {
+                sql += " AND location LIKE ?";
+                params.push(`%${location}%`);
+            }
+            
+            sql += " ORDER BY posted_value DESC LIMIT ?";
+            params.push(limit);
+            
+            const rows = await db.all(sql, params);
+            return {
+                jobs: rows.map(r => ({
+                    ...r,
+                    tags: JSON.parse(r.tags || '[]'),
+                    skills: JSON.parse(r.skills || '[]')
+                }))
+            };
+        } catch (err) {
+            return { error: "Failed to search database", details: err.message };
+        }
+    }
+    return { error: "Unknown tool" };
+}
+
 // ─── ANTHROPIC PROXY ────────────────────────────────────────────────────────
 // Forwards Claude API calls so the API key stays in .env, not the browser.
 app.post('/api/anthropic/messages', async (req, res) => {
@@ -1255,24 +1308,57 @@ app.post('/api/anthropic/messages', async (req, res) => {
 
             const geminiPayload = {
                 contents: geminiMessages,
-                system_instruction: systemInstruction ? { parts: [{ text: systemInstruction }] } : undefined,
+                system_instruction: systemInstruction ? { parts: [{ text: systemInstruction }] } : { parts: [{ text: "You are Orion, the GradLaunch AI Career Copilot. You help users find jobs, tailor resumes, and analyze career fits. If a user asks for jobs, use the 'search_jobs' tool." }] },
+                tools: TOOLS_DEFINITION,
                 generationConfig: {
                     maxOutputTokens: req.body.max_tokens || 1500,
                 }
             };
 
-            const response = await axios.post(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+            let response = await axios.post(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
                 geminiPayload,
                 { headers: { 'Content-Type': 'application/json' }, timeout: 60000 }
             );
 
-            const aiText = response.data.candidates?.[0]?.content?.parts?.[0]?.text || "No response candidate found.";
+            // Check for tool calls
+            const candidate = response.data.candidates?.[0];
+            const part = candidate?.content?.parts?.[0];
+
+            if (part?.functionCall) {
+                const toolResult = await handleToolCall(part.functionCall);
+                
+                // Add the model's tool call and the result to the history
+                geminiMessages.push(candidate.content); // Add the call
+                geminiMessages.push({
+                    role: 'function',
+                    parts: [{
+                        functionResponse: {
+                            name: part.functionCall.name,
+                            response: toolResult
+                        }
+                    }]
+                });
+
+                // Get final response from Gemini
+                response = await axios.post(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+                    { ...geminiPayload, contents: geminiMessages },
+                    { headers: { 'Content-Type': 'application/json' }, timeout: 60000 }
+                );
+            }
+
+            const aiText = response.data.candidates?.[0]?.content?.parts?.[0]?.text || "I found some results but couldn't summarize them.";
+            const finalResults = response.data.candidates?.[0]?.content?.parts;
+            
+            // Extract the tool data if it was used, so the frontend can render it
+            const toolData = geminiMessages.find(m => m.role === 'function')?.parts?.[0]?.functionResponse?.response;
 
             return res.json({
                 content: [{ type: 'text', text: aiText }],
-                model: 'gemini-2.5-flash',
-                role: 'assistant'
+                model: 'gemini-2.0-flash',
+                role: 'assistant',
+                toolData: toolData // Pass data to frontend for rendering cards
             });
         } catch (err) {
             console.error('[GradLaunch] Gemini API error:', err.response?.data || err.message);

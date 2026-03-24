@@ -19,14 +19,16 @@ export default function Copilot({ C }) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    model: "claude-sonnet-4-20250514",
-                    max_tokens: 1000,
                     messages: [{ role: "user", content: userMsg }]
                 })
             });
             const data = await res.json();
             const aiText = data.content?.[0]?.text || "I'm having trouble connecting right now.";
-            setMessages(prev => [...prev, { role: "ai", text: aiText }]);
+            setMessages(prev => [...prev, { 
+                role: "ai", 
+                text: aiText, 
+                jobs: data.toolData?.jobs || [] // Capture jobs from tool calling
+            }]);
         } catch (e) {
             setMessages(prev => [...prev, { role: "ai", text: "Connection error. Please try again." }]);
         }
@@ -42,7 +44,7 @@ export default function Copilot({ C }) {
 
             <div style={{ flex: 1, padding: 32, overflowY: "auto", display: "flex", flexDirection: "column", gap: 20 }}>
                 {messages.map((m, i) => (
-                    <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "80%" }}>
+                    <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "85%" }}>
                         <div style={{
                             background: m.role === "user" ? C.accent : C.card,
                             color: m.role === "user" ? "#000" : C.text,
@@ -53,6 +55,36 @@ export default function Copilot({ C }) {
                             lineHeight: 1.6
                         }}>
                             {m.text}
+                            
+                            {m.jobs && m.jobs.length > 0 && (
+                                <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+                                    {m.jobs.map(job => (
+                                        <div key={job.id} style={{ 
+                                            background: C.surface, 
+                                            border: `1px solid ${C.border}`, 
+                                            borderRadius: 12, 
+                                            padding: 12,
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: 12
+                                        }}>
+                                            <div style={{ width: 32, height: 32, borderRadius: 8, background: C.tag, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14, color: C.accent }}>
+                                                {job.company.charAt(0)}
+                                            </div>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontWeight: 600, fontSize: 14, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{job.title}</div>
+                                                <div style={{ fontSize: 12, color: C.muted }}>{job.company} • {job.location}</div>
+                                            </div>
+                                            <button 
+                                                onClick={() => window.open(job.link, '_blank')}
+                                                style={{ background: `${C.accent}22`, color: C.accent, border: "none", padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                                            >
+                                                View
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 ))}
