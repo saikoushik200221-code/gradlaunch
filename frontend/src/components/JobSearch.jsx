@@ -15,6 +15,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
     const [selectedJob, setSelectedJob] = useState(null);
     const [analysis, setAnalysis] = useState(null);
     const [analyzing, setAnalyzing] = useState(false);
+    const [resolvedLink, setResolvedLink] = useState(null);
 
     // Real Job Data Fetching
     const [loadingJobs, setLoadingJobs] = useState(false);
@@ -57,6 +58,22 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
 
     useEffect(() => {
         setAnalysis(null);
+        setResolvedLink(null);
+
+        if (selectedJob?.link) {
+            const resolve = async () => {
+                try {
+                    const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
+                    const url = `${apiBase}/api/resolve-link?url=${encodeURIComponent(selectedJob.link)}`;
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    if (data.resolvedUrl) setResolvedLink(data.resolvedUrl);
+                } catch (e) {
+                    console.warn("Link resolution failed", e);
+                }
+            };
+            resolve();
+        }
     }, [selectedJob?.id]);
 
     async function analyzeFit() {
@@ -414,10 +431,10 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                             </button>
                             {selectedJob.link && (
                                 <button
-                                    onClick={() => window.open(selectedJob.link, "_blank")}
+                                    onClick={() => window.open(resolvedLink || selectedJob.link, "_blank")}
                                     style={{ flex: 1, background: "transparent", border: `1px solid ${C.accent}`, color: C.accent, padding: "16px", borderRadius: 14, fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, cursor: "pointer", transition: "all 0.2s" }}
                                 >
-                                    View Job Application
+                                    {resolvedLink && resolvedLink !== selectedJob.link ? "View Direct Apply" : "View Job Application"}
                                 </button>
                             )}
                             <button

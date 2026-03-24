@@ -1449,6 +1449,26 @@ const TOOLS_DEFINITION = [
     }
 ];
 
+app.get('/api/resolve-link', async (req, res) => {
+    const { url } = req.query;
+    if (!url) return res.status(400).json({ error: 'Missing URL' });
+    
+    try {
+        console.log(`[GradLaunch] Resolving redirect for: ${url.substring(0, 50)}...`);
+        const response = await axios.get(url, {
+            maxRedirects: 5,
+            timeout: 5000,
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
+        });
+        
+        // Return the final resolved URL
+        res.json({ resolvedUrl: response.request.res.responseUrl || url });
+    } catch (err) {
+        // If it fails (e.g. 403 or too many redirects), just return the original
+        res.json({ resolvedUrl: url, error: err.message });
+    }
+});
+
 async function handleToolCall(call) {
     if (call.name === "search_jobs") {
         const { query, location, limit = 5 } = call.args;
