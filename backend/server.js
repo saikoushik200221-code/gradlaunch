@@ -693,6 +693,46 @@ const ADZUNA_APP_ID = process.env.ADZUNA_APP_ID || '';
 const ADZUNA_APP_KEY = process.env.ADZUNA_APP_KEY || '';
 const FINDWORK_API_KEY = process.env.FINDWORK_API_KEY || '';
 const JOOBLE_API_KEY = process.env.JOOBLE_API_KEY || '';
+const CAREERJET_AFFID = process.env.CAREERJET_AFFID || '';
+
+async function scrapeCareerjet() {
+    if (!CAREERJET_AFFID) return [];
+    const jobs = [];
+    const queries = ['software engineer', 'data science', 'web developer'];
+    try {
+        console.log('[GradLaunch] Fetching from Careerjet API...');
+        for (const query of queries) {
+            const url = `https://public.api.careerjet.net/search?affid=${CAREERJET_AFFID}&keywords=${encodeURIComponent(query)}&location=usa&user_ip=1.1.1.1&user_agent=GradLaunchBot/1.0`;
+            const { data } = await axios.get(url, { timeout: 15000 });
+            
+            if (data && data.jobs) {
+                data.jobs.forEach((item, i) => {
+                    const desc = item.description?.replace(/<[^>]*>?/gm, ' ') || '';
+                    jobs.push({
+                        id: `cj-${Date.now() + i}-${Math.random().toString(36).substr(2, 5)}`,
+                        title: item.title,
+                        company: item.company || 'Careerjet Employer',
+                        location: item.locations || 'USA',
+                        type: 'Full-time',
+                        postedValue: new Date(item.date).getTime() || Date.now(),
+                        posted: getPostedTime(item.date),
+                        salary: item.salary || 'Competitive',
+                        tags: generateTags(item.title, desc, item.locations || 'USA'),
+                        logo: (item.company || 'C').charAt(0).toUpperCase(),
+                        match: getMatchScore(item.title),
+                        description: desc.length > 3000 ? desc.slice(0, 3000).trim() + '...' : desc.trim(),
+                        skills: extractSkills(item.title, desc),
+                        link: item.url,
+                        source: 'Careerjet',
+                    });
+                });
+            }
+        }
+    } catch (err) {
+        console.warn(`Careerjet fetch failed: ${err.message}`);
+    }
+    return jobs;
+}
 
 async function scrapeJooble() {
     if (!JOOBLE_API_KEY) return [];
@@ -1077,7 +1117,7 @@ async function runJobScraper() {
     isScraping = true;
     console.log('[GradLaunch] Starting background scraping cycle...');
     try {
-        const [wwrJobs, anJobs, remotiveJobs, jobicyJobs, hnJobs, adzunaJobs, findworkJobs, joobleJobs] = await Promise.all([
+        const [wwrJobs, anJobs, remotiveJobs, jobicyJobs, hnJobs, adzunaJobs, findworkJobs, joobleJobs, cjJobs] = await Promise.all([
             scrapeWWR(),
             scrapeArbeitnow(),
             scrapeRemotive(),
@@ -1085,10 +1125,11 @@ async function runJobScraper() {
             scrapeHN(),
             scrapeAdzuna(),
             scrapeFindwork(),
-            scrapeJooble()
+            scrapeJooble(),
+            scrapeCareerjet()
         ]);
 
-        const rawJobs = [...wwrJobs, ...anJobs, ...remotiveJobs, ...jobicyJobs, ...hnJobs, ...adzunaJobs, ...findworkJobs, ...joobleJobs];
+        const rawJobs = [...wwrJobs, ...anJobs, ...remotiveJobs, ...jobicyJobs, ...hnJobs, ...adzunaJobs, ...findworkJobs, ...joobleJobs, ...cjJobs];
         console.log(`[GradLaunch] Raw total found: ${rawJobs.length}`);
 
         // Get existing IDs and minimal data for deduplication
