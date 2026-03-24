@@ -12,6 +12,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
     const [filters, setFilters] = useState({ newGrad: false, h1b: false, opt: false, remote: false, onsite: false, fresher: false });
     const [roleFilter, setRoleFilter] = useState("All");
     const [expFilter, setExpFilter] = useState("All");
+    const [companyTypeFilter, setCompanyTypeFilter] = useState("All");
     const [selectedJob, setSelectedJob] = useState(null);
     const [analysis, setAnalysis] = useState(null);
     const [analyzing, setAnalyzing] = useState(false);
@@ -143,8 +144,9 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
 
         const matchRole = roleFilter === "All" || ROLE_KEYWORDS[roleFilter]?.some(kw => titleLower.includes(kw));
         const matchExp = expFilter === "All" || EXP_KEYWORDS[expFilter]?.some(kw => titleLower.includes(kw));
+        const matchCompanyType = companyTypeFilter === "All" || j.company_type === companyTypeFilter;
 
-        return matchSearch && matchNG && matchH1 && matchOPT && matchR && matchOnsite && matchF && categoryMatch && matchRole && matchExp;
+        return matchSearch && matchNG && matchH1 && matchOPT && matchR && matchOnsite && matchF && categoryMatch && matchRole && matchExp && matchCompanyType;
     });
 
     const scored = profileText
@@ -277,6 +279,30 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                     ))}
                 </div>
 
+                {/* Company Type filters */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    <span style={{ fontSize: 11, color: C.muted, alignSelf: "center", fontWeight: 600, marginRight: 4 }}>TYPE</span>
+                    {["All", "Big MNC", "Startup"].map(t => (
+                        <button
+                            key={t}
+                            onClick={() => setCompanyTypeFilter(t)}
+                            style={{
+                                background: companyTypeFilter === t ? `${C.accent}22` : C.card,
+                                border: `1px solid ${companyTypeFilter === t ? C.accent : C.border}`,
+                                color: companyTypeFilter === t ? C.accent : C.muted,
+                                padding: "5px 11px",
+                                borderRadius: "20px",
+                                fontSize: 11,
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                transition: "all 0.2s"
+                            }}
+                        >
+                            {t}
+                        </button>
+                    ))}
+                </div>
+
                 <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, paddingRight: 4 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 11, color: C.muted, marginBottom: 4 }}>
                         <span>{scored.length} jobs found {lastUpdated && `· Updated ${lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}</span>
@@ -319,17 +345,36 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                                 {isSaved(job.id) ? "\uD83D\uDCD6" : "\uD83D\uDCD1"}
                             </div>
                             <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                                <LogoCircle letter={job.logo} size={42} />
+                                <LogoCircle 
+                                    letter={job.logo?.length === 1 ? job.logo : job.company?.charAt(0).toUpperCase()} 
+                                    logoUrl={job.logo?.startsWith("http") ? job.logo : null} 
+                                    size={44} 
+                                />
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                                        <h3 style={{ margin: 0, fontSize: 18, color: C.text, fontFamily: "'Syne', sans-serif" }}>{job.title}</h3>
-                                        {job.embedding && profileText && (
-                                            <div style={{ background: `${C.accent}20`, color: C.accent, padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 800, border: `1px solid ${C.accent}40` }}>
-                                                {job.match || 85}% MATCH
-                                            </div>
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
+                                        <h3 style={{ margin: 0, fontSize: 13, fontWeight: 500, color: C.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{job.title}</h3>
+                                        {job.match && <MatchRing score={job.match} color={C.accent} />}
+                                    </div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+                                        <span style={{ fontSize: 16, fontWeight: 800, color: C.accent, fontFamily: "'Syne', sans-serif" }}>{job.company}</span>
+                                        {job.company_type && (
+                                            <span style={{ 
+                                                fontSize: 10, 
+                                                background: job.company_type === 'Big MNC' ? '#3b82f622' : '#f59e0b22', 
+                                                color: job.company_type === 'Big MNC' ? '#60a5fa' : '#fbbf24', 
+                                                padding: "2px 8px", 
+                                                borderRadius: 6, 
+                                                fontWeight: 800, 
+                                                textTransform: "uppercase",
+                                                border: `1px solid ${job.company_type === 'Big MNC' ? '#3b82f644' : '#f59e0b44'}`
+                                            }}>
+                                                {job.company_type}
+                                            </span>
                                         )}
                                     </div>
-                                    <p style={{ color: C.muted, margin: "4px 0 12px 0", fontSize: 14 }}>{job.company} \u00B7 {job.location}</p>
+                                    <div style={{ fontSize: 12, color: C.muted, display: "flex", alignItems: "center", gap: 4, marginBottom: 8 }}>
+                                        <span>{job.location}</span>
+                                    </div>
                                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                                         {job.tags.includes("OPT Accepted") && (
                                             <span style={{ background: `${C.green}15`, color: C.green, padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, border: `1px solid ${C.green}33` }}>

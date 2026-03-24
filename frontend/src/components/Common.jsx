@@ -39,14 +39,14 @@ export function TagBadge({ label, C }) {
     );
 }
 
-export function LogoCircle({ letter, size = 40 }) {
+export function LogoCircle({ letter, logoUrl, size = 40 }) {
     const bg = LOGO_COLORS[letter] || "#334155";
     return (
         <div className="logo-pulse" style={{
             width: size,
             height: size,
             borderRadius: size * 0.25,
-            background: bg,
+            background: logoUrl ? "#fff" : bg,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -56,9 +56,11 @@ export function LogoCircle({ letter, size = 40 }) {
             color: "#fff",
             flexShrink: 0,
             transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-            cursor: "pointer"
+            cursor: "pointer",
+            overflow: "hidden",
+            border: logoUrl ? "1px solid rgba(0,0,0,0.05)" : "none"
         }}>
-            {letter}
+            {logoUrl ? <img src={logoUrl} alt={letter} style={{ width: "100%", height: "100%", objectFit: "contain", padding: "4px" }} /> : letter}
             <style>{`
                 .logo-pulse:hover { transform: scale(1.05) rotate(-3deg); filter: brightness(1.2); box-shadow: 0 8px 16px rgba(0,0,0,0.2); }
             `}</style>

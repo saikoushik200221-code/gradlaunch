@@ -156,7 +156,7 @@ async function initDb() {
         CREATE TABLE IF NOT EXISTS saved_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, job_id TEXT, job_data TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, job_id));
         CREATE TABLE IF NOT EXISTS applications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, company TEXT, role TEXT, logo TEXT, stage TEXT, notes TEXT, job_link TEXT, match_score INTEGER, interview_date TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS application_history (id INTEGER PRIMARY KEY AUTOINCREMENT, app_id INTEGER, stage TEXT, date TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
-        CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, title TEXT, company TEXT, location TEXT, type TEXT, salary TEXT, salary_min INTEGER, salary_max INTEGER, tags TEXT, skills TEXT, description TEXT, link TEXT, posted TEXT, posted_value INTEGER, embedding TEXT, logo TEXT, match_score INTEGER, source TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)
+        CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, title TEXT, company TEXT, location TEXT, type TEXT, salary TEXT, salary_min INTEGER, salary_max INTEGER, tags TEXT, skills TEXT, description TEXT, link TEXT, posted TEXT, posted_value INTEGER, embedding TEXT, logo TEXT, match_score INTEGER, source TEXT, sponsorship_friendly INTEGER, company_type TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)
     `);
     try { await db.exec(`CREATE INDEX IF NOT EXISTS idx_jobs_company_title ON jobs(company, title)`); } catch (e) { }
     // Migration: add email_notifications column
@@ -1254,12 +1254,13 @@ async function runJobScraper() {
                 await db.run(`
                     INSERT OR IGNORE INTO jobs (
                         id, title, company, location, type, salary, salary_min, salary_max, 
-                        tags, skills, description, link, posted, posted_value, logo, source, sponsorship_friendly
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        tags, skills, description, link, posted, posted_value, logo, source, sponsorship_friendly, company_type
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `, [
                     j.id, j.title, j.company, j.location, j.type, j.salary, s.min, s.max,
                     JSON.stringify(j.tags), JSON.stringify(j.skills), j.description, j.link, j.posted, j.postedValue, j.logo, j.source || 'Aggregator',
-                    j.sponsorship_friendly || 0
+                    j.sponsorship_friendly || 0,
+                    classifyCompany(j.company, j.source)
                 ]);
             } catch (err) {
                 console.error(`Error saving job ${j.id}:`, err.message);
@@ -1395,6 +1396,28 @@ app.get('/api/jobs/:id', async (req, res) => {
         });
 
 
+function classifyCompany(company, source) {
+    const c = (company || "").toLowerCase();
+    const MNCs = [
+        "google", "amazon", "microsoft", "meta", "netflix", "apple", "adobe", "salesforce", "nvidia", "intel", "oracle", "cisco", "ibm",
+        "jpmorgan", "goldman sachs", "capital one", "visa", "mastercard", "american express", "well fargo", "bank of america",
+        "disney", "nike", "ford", "tesla", "spacex", "uber", "airbnb", "lyft", "door dash", "instacart", "stripe", "coinbase",
+        "deloitte", "accenture", "pwc", "ey", "kpmg", "mckinsey", "boston consulting", "walmart", "target", "costco", "starbucks"
+    ];
+    
+    // Heuristics
+    if (source === 'HN' || source === 'WWR' || source === 'RemoteOK') return 'Startup';
+    if (MNCs.some(name => c.includes(name))) return 'Big MNC';
+    
+    // Check for common MNC suffixes
+    if (c.includes(" corp") || c.includes(" inc") || c.includes(" systems") || c.includes(" technologies") || c.includes(" group")) {
+        // Many tech startups also use "Inc", so this is a soft signal. 
+        // For now, if it's not in the known MNC list, call it "Company" or "Startup" based on source.
+    }
+
+    return 'Startup'; // Default to startup for aggregator roles if not a known giant
+}
+
 function isUSJob(job) {
     const loc = (job.location || "").toLowerCase();
     // Positive keywords
@@ -1471,7 +1494,7 @@ async function handleToolCall(call) {
         console.log(`[Orion] Tool Search: "${query}" in "${location || 'Anywhere'}"`);
         
         try {
-            let sql = "SELECT title, company, location, link, id, tags, skills, sponsorship_friendly FROM jobs WHERE (title LIKE ? OR company LIKE ? OR skills LIKE ?) AND (LOWER(location) LIKE '%usa%' OR LOWER(location) LIKE '%united states%' OR LOWER(location) LIKE '%remote%' OR LOWER(location) LIKE '%worldwide%' OR location = 'USA')";
+            let sql = "SELECT title, company, location, link, id, tags, skills, sponsorship_friendly, company_type FROM jobs WHERE (title LIKE ? OR company LIKE ? OR skills LIKE ?) AND (LOWER(location) LIKE '%usa%' OR LOWER(location) LIKE '%united states%' OR LOWER(location) LIKE '%remote%' OR LOWER(location) LIKE '%worldwide%' OR location = 'USA')";
             let params = [`%${query}%`, `%${query}%`, `%${query}%`];
             
             if (location) {
