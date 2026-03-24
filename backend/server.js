@@ -163,6 +163,8 @@ async function initDb() {
     try { await db.exec(`ALTER TABLE users ADD COLUMN email_notifications TEXT DEFAULT 'none'`); } catch (e) { }
     // Migration: add interview_date column to applications
     try { await db.exec(`ALTER TABLE applications ADD COLUMN interview_date TEXT`); } catch (e) { }
+    // Migration: add sponsorship_friendly column to jobs
+    try { await db.exec(`ALTER TABLE jobs ADD COLUMN sponsorship_friendly INTEGER DEFAULT 0`); } catch (e) { }
     // Ensure Guest User exists so demo-token works seamlessly across all endpoints
     try {
         await db.run('INSERT OR IGNORE INTO users (id, name, email, password, profile) VALUES (?, ?, ?, ?, ?)', [
@@ -701,35 +703,41 @@ const USAJOBS_EMAIL = process.env.USAJOBS_EMAIL || 'admin@gradlaunch.ai';
 async function scrapeJSearch() {
     if (!RAPIDAPI_KEY) return [];
     const jobs = [];
+    const searchQueries = ['software developer intern in USA', 'new grad software engineer USA'];
     try {
-        console.log('[GradLaunch] Fetching from JSearch (RapidAPI)...');
-        const { data } = await axios.get('https://jsearch.p.rapidapi.com/search', {
-            params: { query: 'software developer intern in USA', num_pages: 1 },
-            headers: { 'X-RapidAPI-Key': RAPIDAPI_KEY, 'X-RapidAPI-Host': 'jsearch.p.rapidapi.com' },
-            timeout: 15000
-        });
-        
-        if (data && data.data) {
-            data.data.forEach((item, i) => {
-                const desc = item.job_description || '';
-                jobs.push({
-                    id: `js-${item.job_id || Date.now() + i}`,
-                    title: item.job_title,
-                    company: item.employer_name,
-                    location: `${item.job_city || ''}, ${item.job_state || ''} ${item.job_country || ''}`.trim() || 'USA',
-                    type: item.job_employment_type || 'Full-time',
-                    postedValue: new Date(item.job_posted_at_datetime_utc).getTime() || Date.now(),
-                    posted: getPostedTime(item.job_posted_at_datetime_utc),
-                    salary: item.job_salary_period ? `${item.job_min_salary || ''} - ${item.job_max_salary || ''} ${item.job_salary_currency || ''}` : 'Competitive',
-                    tags: generateTags(item.job_title, desc, item.job_country || 'USA'),
-                    logo: item.employer_logo || (item.employer_name || 'J').charAt(0).toUpperCase(),
-                    match: getMatchScore(item.job_title),
-                    description: desc.length > 3000 ? desc.slice(0, 3000).trim() + '...' : desc.trim(),
-                    skills: extractSkills(item.job_title, desc),
-                    link: item.job_apply_link || item.job_google_link,
-                    source: 'JSearch',
+        console.log('[GradLaunch] Fetching from JSearch (RapidAPI) - Multi-page...');
+        for (const query of searchQueries) {
+            for (let page = 1; page <= 2; page++) {
+                const { data } = await axios.get('https://jsearch.p.rapidapi.com/search', {
+                    params: { query: query, num_pages: 1, page: page },
+                    headers: { 'X-RapidAPI-Key': RAPIDAPI_KEY, 'X-RapidAPI-Host': 'jsearch.p.rapidapi.com' },
+                    timeout: 15000
                 });
-            });
+                
+                if (data && data.data) {
+                    data.data.forEach((item, i) => {
+                        const desc = item.job_description || '';
+                        jobs.push({
+                            id: `js-${item.job_id || Date.now() + i + page}`,
+                            title: item.job_title,
+                            company: item.employer_name,
+                            location: `${item.job_city || ''}, ${item.job_state || ''} ${item.job_country || ''}`.trim() || 'USA',
+                            type: item.job_employment_type || 'Full-time',
+                            postedValue: new Date(item.job_posted_at_datetime_utc).getTime() || Date.now(),
+                            posted: getPostedTime(item.job_posted_at_datetime_utc),
+                            salary: item.job_salary_period ? `${item.job_min_salary || ''} - ${item.job_max_salary || ''} ${item.job_salary_currency || ''}` : 'Competitive',
+                            tags: generateTags(item.job_title, desc, item.job_country || 'USA'),
+                            logo: item.employer_logo || (item.employer_name || 'J').charAt(0).toUpperCase(),
+                            match: getMatchScore(item.job_title),
+                            description: desc.length > 3000 ? desc.slice(0, 3000).trim() + '...' : desc.trim(),
+                            skills: extractSkills(item.job_title, desc),
+                            link: item.job_apply_link || item.job_google_link,
+                            source: 'JSearch',
+                            sponsorship_friendly: analyzeSponsorship(item.job_title, desc)
+                        });
+                    });
+                }
+            }
         }
     } catch (err) {
         console.warn(`JSearch fetch failed: ${err.message}`);
@@ -787,32 +795,36 @@ async function scrapeCareerjet() {
     const jobs = [];
     const queries = ['software engineer', 'data science', 'web developer'];
     try {
-        console.log('[GradLaunch] Fetching from Careerjet API...');
+        console.log('[GradLaunch] Fetching from Careerjet API - Multi-page...');
         for (const query of queries) {
-            const url = `https://public.api.careerjet.net/search?affid=${CAREERJET_AFFID}&keywords=${encodeURIComponent(query)}&location=usa&user_ip=1.1.1.1&user_agent=GradLaunchBot/1.0`;
-            const { data } = await axios.get(url, { timeout: 15000 });
-            
-            if (data && data.jobs) {
-                data.jobs.forEach((item, i) => {
-                    const desc = item.description?.replace(/<[^>]*>?/gm, ' ') || '';
-                    jobs.push({
-                        id: `cj-${Date.now() + i}-${Math.random().toString(36).substr(2, 5)}`,
-                        title: item.title,
-                        company: item.company || 'Careerjet Employer',
-                        location: item.locations || 'USA',
-                        type: 'Full-time',
-                        postedValue: new Date(item.date).getTime() || Date.now(),
-                        posted: getPostedTime(item.date),
-                        salary: item.salary || 'Competitive',
-                        tags: generateTags(item.title, desc, item.locations || 'USA'),
-                        logo: (item.company || 'C').charAt(0).toUpperCase(),
-                        match: getMatchScore(item.title),
-                        description: desc.length > 3000 ? desc.slice(0, 3000).trim() + '...' : desc.trim(),
-                        skills: extractSkills(item.title, desc),
-                        link: item.url,
-                        source: 'Careerjet',
+            for (let page = 1; page <= 3; page++) {
+                const url = `https://public.api.careerjet.net/search?affid=${CAREERJET_AFFID}&keywords=${encodeURIComponent(query)}&location=usa&user_ip=1.1.1.1&user_agent=GradLaunchBot/1.0&page=${page}`;
+                const { data } = await axios.get(url, { timeout: 15000 });
+                
+                if (data && data.jobs) {
+                    data.jobs.forEach((item, i) => {
+                        const desc = item.description?.replace(/<[^>]*>?/gm, ' ') || '';
+                        jobs.push({
+                            id: `cj-${Date.now() + i + page}-${Math.random().toString(36).substr(2, 5)}`,
+                            title: item.title,
+                            company: item.company || 'Careerjet Employer',
+                            location: item.locations || 'USA',
+                            type: 'Full-time',
+                            postedValue: new Date(item.date).getTime() || Date.now(),
+                            posted: getPostedTime(item.date),
+                            salary: item.salary || 'Competitive',
+                            tags: generateTags(item.title, desc, item.locations || 'USA'),
+                            logo: (item.company || 'C').charAt(0).toUpperCase(),
+                            match: getMatchScore(item.title),
+                            description: desc.length > 3000 ? desc.slice(0, 3000).trim() + '...' : desc.trim(),
+                            skills: extractSkills(item.title, desc),
+                            link: item.url,
+                            source: 'Careerjet',
+                            sponsorship_friendly: analyzeSponsorship(item.title, desc)
+                        });
                     });
-                });
+                    if (page >= data.pages) break;
+                }
             }
         }
     } catch (err) {
@@ -1233,14 +1245,15 @@ async function runJobScraper() {
                 await db.run(`
                     INSERT OR IGNORE INTO jobs (
                         id, title, company, location, type, salary, salary_min, salary_max, 
-                        tags, skills, description, link, posted, posted_value, logo, source
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        tags, skills, description, link, posted, posted_value, logo, source, sponsorship_friendly
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `, [
                     j.id, j.title, j.company, j.location, j.type, j.salary, s.min, s.max,
-                    JSON.stringify(j.tags), JSON.stringify(j.skills), j.description, j.link, j.posted, j.postedValue, j.logo, j.source || 'Aggregator'
+                    JSON.stringify(j.tags), JSON.stringify(j.skills), j.description, j.link, j.posted, j.postedValue, j.logo, j.source || 'Aggregator',
+                    j.sponsorship_friendly || 0
                 ]);
             } catch (err) {
-                console.error(`Failed to save job ${j.id}:`, err.message);
+                console.error(`Error saving job ${j.id}:`, err.message);
             }
         }
 
@@ -1307,7 +1320,7 @@ cron.schedule('0 8 * * *', async () => {
 
 app.get('/api/jobs', async (req, res) => {
     try {
-        const { q, remote, newGrad } = req.query;
+        const { q, remote, newGrad, sponsorship } = req.query;
         let query = 'SELECT * FROM jobs';
         const params = [];
         const conditions = [];
@@ -1322,6 +1335,9 @@ app.get('/api/jobs', async (req, res) => {
         }
         if (newGrad === 'true') {
             conditions.push('(tags LIKE "%New Grad%" OR tags LIKE "%Fresher%")');
+        }
+        if (sponsorship === 'true') {
+            conditions.push('(sponsorship_friendly = 1 OR tags LIKE "%Sponsor%" OR tags LIKE "%Visa%")');
         }
 
         if (conditions.length > 0) {
@@ -1363,11 +1379,25 @@ app.get('/api/jobs/:id', async (req, res) => {
         };
         res.json(job);
     } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch job' });
-    }
-});
+                res.status(500).json({ error: 'Failed to fetch job' });
+            }
+        });
 
 
+function analyzeSponsorship(title, desc) {
+    const text = (title + " " + desc).toLowerCase();
+    const positive = ["h1b", "sponsorship available", "visa sponsorship", "h-1b", "opt friendly", "cpt friendly", "sponsorship provided"];
+    const negative = ["no sponsorship", "cannot sponsor", "not able to sponsor", "citizen only", "us citizen only"];
+    
+    // Check negatives first
+    if (negative.some(word => text.includes(word))) return 0;
+    // Check positives
+    if (positive.some(word => text.includes(word))) return 1;
+    // Heuristic: Mention of "Visa" usually implies we should look closer, but mark as 0 if unsure
+    return 0;
+}
+
+// ─── JOB SCRAPER RE-INIT ────────────────────────────────────────────────────
 // ─── AI TOOL DEFINITIONS ───────────────────────────────────────────────────
 const TOOLS_DEFINITION = [
     {
@@ -1395,7 +1425,7 @@ async function handleToolCall(call) {
         console.log(`[Orion] Tool Search: "${query}" in "${location || 'Anywhere'}"`);
         
         try {
-            let sql = "SELECT title, company, location, link, id, tags, skills FROM jobs WHERE (title LIKE ? OR company LIKE ? OR skills LIKE ?)";
+            let sql = "SELECT title, company, location, link, id, tags, skills, sponsorship_friendly FROM jobs WHERE (title LIKE ? OR company LIKE ? OR skills LIKE ?)";
             let params = [`%${query}%`, `%${query}%`, `%${query}%`];
             
             if (location) {

@@ -113,8 +113,8 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
         const titleLower = j.title.toLowerCase();
         const matchSearch = !q || titleLower.includes(q) || j.company.toLowerCase().includes(q) || j.skills.some(s => s.toLowerCase().includes(q));
         const matchNG = !filters.newGrad || j.tags.includes("New Grad");
-        const matchH1 = !filters.h1b || j.tags.includes("H1B Sponsor");
-        const matchOPT = !filters.opt || j.tags.includes("OPT Accepted");
+        const matchH1 = !filters.h1b || j.sponsorship_friendly === 1 || j.tags.includes("H1B Sponsor");
+        const matchOPT = !filters.opt || j.sponsorship_friendly === 1 || j.tags.includes("OPT Accepted");
         const matchR = !filters.remote || j.tags.some(t => t.includes("Remote"));
         const matchOnsite = !filters.onsite || !j.tags.some(t => t.includes("Remote"));
         const matchF = !filters.fresher || j.tags.includes("Fresher Friendly");
