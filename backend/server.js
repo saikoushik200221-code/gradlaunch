@@ -1058,24 +1058,30 @@ async function scrapeArbeitnow() {
                 data.data.forEach((item, i) => {
                     const title = item.title;
                     const company = item.company_name;
-                    const location = item.location || 'USA';
                     const isRemote = item.remote || false;
+                    const location = item.location || '';
+                    
+                    // Strictly filter for US or Remote
+                    const isUS = location.toLowerCase().includes('usa') || location.toLowerCase().includes('united states') || location.toLowerCase().includes('remote');
+                    if (!isUS && !isRemote) return;
+
                     const description = item.description.replace(/<[^>]*>?/gm, ' ');
                     const pubDate = item.created_at * 1000;
                     jobs.push({
                         id: `an-${item.slug || Date.now() + i}`,
                         title, company,
-                        location: isRemote ? `${location} (Remote)` : location,
+                        location: isRemote ? `${location || 'USA'} (Remote)` : (location || 'USA'),
                         type: item.job_types?.[0] || 'Full-time',
                         postedValue: pubDate,
                         posted: getPostedTime(new Date(pubDate)),
                         salary: 'Competitive',
-                        tags: generateTags(title, description, location, isRemote),
+                        tags: generateTags(title, description, location || 'USA', isRemote),
                         logo: (company || 'A').charAt(0).toUpperCase(),
                         match: getMatchScore(title),
                         description: description.length > 3000 ? description.slice(0, 3000).trim() + '...' : description.trim(),
                         skills: extractSkills(title, description),
                         link: item.url,
+                        sponsorship_friendly: analyzeSponsorship(title, description)
                     });
                 });
             }
@@ -1230,8 +1236,11 @@ async function runJobScraper() {
             scrapeUSAJobs()
         ]);
 
-        const rawJobs = [...wwrJobs, ...anJobs, ...remotiveJobs, ...jobicyJobs, ...hnJobs, ...adzunaJobs, ...findworkJobs, ...joobleJobs, ...cjJobs, ...jsJobs, ...usjJobs];
-        console.log(`[GradLaunch] Raw total found: ${rawJobs.length}`);
+        const allRaw = [...wwrJobs, ...anJobs, ...remotiveJobs, ...jobicyJobs, ...hnJobs, ...adzunaJobs, ...findworkJobs, ...joobleJobs, ...cjJobs, ...jsJobs, ...usjJobs];
+        
+        // CENTRAL GEOGRAPHIC FILTER (USP requirement)
+        const rawJobs = allRaw.filter(j => isUSJob(j));
+        console.log(`[GradLaunch] Raw total found: ${allRaw.length} | US Filtered: ${rawJobs.length}`);
 
         // Get existing IDs and minimal data for deduplication
         const existing = await db.all('SELECT id, company, title FROM jobs ORDER BY created_at DESC LIMIT 500');
@@ -1259,6 +1268,8 @@ async function runJobScraper() {
 
         // Cleanup old jobs (older than 7 days)
         await db.run("DELETE FROM jobs WHERE created_at < datetime('now', '-7 days')");
+        // Cleanup non-US jobs (one-time or recurring safety)
+        await db.run("DELETE FROM jobs WHERE (LOWER(location) NOT LIKE '%usa%' AND LOWER(location) NOT LIKE '%united states%' AND LOWER(location) NOT LIKE '%remote%' AND LOWER(location) NOT LIKE '%worldwide%')");
 
         // [Phase 9] Send email alerts for new high-match jobs
         if (newJobs.length > 0) {
@@ -1383,6 +1394,25 @@ app.get('/api/jobs/:id', async (req, res) => {
             }
         });
 
+
+function isUSJob(job) {
+    const loc = (job.location || "").toLowerCase();
+    const US_KEYWORDS = ["usa", "united states", "america", " us", "remote", "worldwide"];
+    const NON_US_COUNTRIES = ["germany", "germany", "berlin", "uk ", "london", "india", "canada"];
+    
+    // Explicitly check for US or Remote
+    const hasUSWord = US_KEYWORDS.some(kw => loc.includes(kw));
+    const hasNonUSWord = NON_US_COUNTRIES.some(kw => loc.includes(kw));
+
+    // If it's explicitly remote, it's allowed
+    if (loc.includes("remote")) return true;
+    // If it mentions US keywords and NO non-US keywords (simple heuristic)
+    if (hasUSWord && !hasNonUSWord) return true;
+    // Default to USA if no location is specified (as most our scrapers are US-targeted now)
+    if (!loc) return true;
+    
+    return false;
+}
 
 function analyzeSponsorship(title, desc) {
     const text = (title + " " + desc).toLowerCase();
