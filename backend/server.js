@@ -1268,8 +1268,8 @@ async function runJobScraper() {
 
         // Cleanup old jobs (older than 7 days)
         await db.run("DELETE FROM jobs WHERE created_at < datetime('now', '-7 days')");
-        // Cleanup non-US jobs (one-time or recurring safety)
-        await db.run("DELETE FROM jobs WHERE (LOWER(location) NOT LIKE '%usa%' AND LOWER(location) NOT LIKE '%united states%' AND LOWER(location) NOT LIKE '%remote%' AND LOWER(location) NOT LIKE '%worldwide%')");
+        // Cleanup non-US jobs (aggressive prune)
+        await db.run("DELETE FROM jobs WHERE (LOWER(location) NOT LIKE '%usa%' AND LOWER(location) NOT LIKE '%united states%' AND LOWER(location) NOT LIKE '%remote%' AND LOWER(location) NOT LIKE '%worldwide%' AND location != 'USA')");
 
         // [Phase 9] Send email alerts for new high-match jobs
         if (newJobs.length > 0) {
@@ -1397,20 +1397,16 @@ app.get('/api/jobs/:id', async (req, res) => {
 
 function isUSJob(job) {
     const loc = (job.location || "").toLowerCase();
-    const US_KEYWORDS = ["usa", "united states", "america", " us", "remote", "worldwide"];
-    const NON_US_COUNTRIES = ["germany", "germany", "berlin", "uk ", "london", "india", "canada"];
+    // Positive keywords
+    const US_KEYWORDS = ["usa", "united states", "america", " us", "remote", "worldwide", "distributed"];
+    // Negative keywords (aggessive list to prune non-US)
+    const NON_US = ["germany", "berlin", "munich", "uk ", "london", "europe", "india", "canada", "toronto", "vancouver", "paris", "france", "spain", "italy", "china", "hyderabad", "bangalore"];
     
-    // Explicitly check for US or Remote
-    const hasUSWord = US_KEYWORDS.some(kw => loc.includes(kw));
-    const hasNonUSWord = NON_US_COUNTRIES.some(kw => loc.includes(kw));
-
-    // If it's explicitly remote, it's allowed
     if (loc.includes("remote")) return true;
-    // If it mentions US keywords and NO non-US keywords (simple heuristic)
-    if (hasUSWord && !hasNonUSWord) return true;
-    // Default to USA if no location is specified (as most our scrapers are US-targeted now)
-    if (!loc) return true;
-    
+    if (NON_US.some(kw => loc.includes(kw))) return false;
+    if (US_KEYWORDS.some(kw => loc.includes(kw))) return true;
+    if (!loc || loc === "null") return true; 
+
     return false;
 }
 
@@ -1475,7 +1471,7 @@ async function handleToolCall(call) {
         console.log(`[Orion] Tool Search: "${query}" in "${location || 'Anywhere'}"`);
         
         try {
-            let sql = "SELECT title, company, location, link, id, tags, skills, sponsorship_friendly FROM jobs WHERE (title LIKE ? OR company LIKE ? OR skills LIKE ?)";
+            let sql = "SELECT title, company, location, link, id, tags, skills, sponsorship_friendly FROM jobs WHERE (title LIKE ? OR company LIKE ? OR skills LIKE ?) AND (LOWER(location) LIKE '%usa%' OR LOWER(location) LIKE '%united states%' OR LOWER(location) LIKE '%remote%' OR LOWER(location) LIKE '%worldwide%' OR location = 'USA')";
             let params = [`%${query}%`, `%${query}%`, `%${query}%`];
             
             if (location) {

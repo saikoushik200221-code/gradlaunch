@@ -139,7 +139,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
         let categoryMatch = true;
         if (filter === "New Grad") categoryMatch = j.tags.includes("New Grad") || j.tags.includes("Fresher Friendly");
         if (filter === "Remote") categoryMatch = j.tags.includes("Remote");
-        if (filter === "US Only") categoryMatch = j.location.includes("US");
+        if (filter === "US Only") categoryMatch = j.location.toLowerCase().includes("us") || j.location.toLowerCase().includes("united states") || j.location.toLowerCase().includes("remote");
 
         const matchRole = roleFilter === "All" || ROLE_KEYWORDS[roleFilter]?.some(kw => titleLower.includes(kw));
         const matchExp = expFilter === "All" || EXP_KEYWORDS[expFilter]?.some(kw => titleLower.includes(kw));
