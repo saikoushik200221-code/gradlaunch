@@ -1,88 +1,51 @@
 import React, { useState, useEffect } from "react";
+import { StatCard, MatchChanceBadge, AssistantBubble, LogoCircle } from "./Common";
+import { useNavigate } from "react-router-dom";
 
-const StatCard = ({ title, value, icon, colorClass }) => (
-    <div className={`bg-surface border border-border/50 rounded-[2rem] p-8 flex flex-col gap-4 relative overflow-hidden transition-all duration-300 hover:-translate-y-2 hover:border-${colorClass}/30 hover:shadow-[0_20px_40px_-15px_rgba(200,255,0,0.1)] group`}>
-        <div className="absolute -top-4 -right-4 text-7xl opacity-[0.03] rotate-12 transition-transform group-hover:rotate-0">{icon}</div>
-        <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl bg-${colorClass}/10 flex items-center justify-center text-lg`}>{icon}</div>
-            <span className="text-xs font-black uppercase tracking-widest text-muted">{title}</span>
+const DashboardStat = ({ title, value, growth, icon, colorClass }) => (
+    <div className={`bg-surface border border-border/50 rounded-[2rem] p-8 flex flex-col gap-4 relative overflow-hidden transition-all duration-300 hover:-translate-y-2 group shadow-lg hover:shadow-accent/5`}>
+        <div className="absolute -top-4 -right-4 text-6xl opacity-[0.03] rotate-12 transition-transform group-hover:rotate-0">{icon}</div>
+        <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl bg-${colorClass}/10 flex items-center justify-center text-lg`}>{icon}</div>
+                <span className="text-xs font-black uppercase tracking-widest text-muted">{title}</span>
+            </div>
+            {growth && (
+                <div className="text-[10px] font-black text-accent bg-accent/10 px-2 py-1 rounded-lg border border-accent/20">
+                    +{growth}%
+                </div>
+            )}
         </div>
         <div className="text-4xl font-syne font-black text-white tracking-tighter">{value}</div>
     </div>
 );
 
-const ChartBar = ({ label, value, max, color }) => {
-    const percentage = max > 0 ? (value / max) * 100 : 0;
-    return (
-        <div className="mb-6">
-            <div className="flex justify-between mb-2 text-[10px] font-black uppercase tracking-widest text-muted">
-                <span className="text-white">{label}</span>
-                <span className="text-accent">{value}</span>
-            </div>
-            <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-                <div 
-                  className="h-full rounded-full transition-all duration-1000 ease-out" 
-                  style={{ width: `${percentage}%`, backgroundColor: color }}
-                />
-            </div>
-        </div>
-    );
-};
-
-const JobCuratedCard = ({ job }) => (
+const JobCompactRow = ({ job, onClick }) => (
     <div 
-        onClick={() => window.open(job.link, "_blank")}
-        className="bg-card/40 border border-border/50 rounded-2xl p-5 flex items-center gap-4 cursor-pointer hover:bg-surface hover:border-accent/30 transition-all hover:translate-x-1"
+        onClick={onClick}
+        className="bg-card/40 border border-border/50 rounded-2xl p-5 flex items-center gap-6 cursor-pointer hover:bg-surface hover:border-accent/30 transition-all group"
     >
-        <div className="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center text-sm font-black text-accent">{job.company?.[0]}</div>
+        <LogoCircle letter={job.company?.[0]} logoUrl={job.logo} size={48} />
         <div className="flex-1 min-w-0">
-            <div className="text-sm font-bold text-white truncate uppercase tracking-tight">{job.title}</div>
-            <div className="text-[10px] text-muted font-black uppercase tracking-widest">{job.company} • {job.location}</div>
+            <div className="text-sm font-bold text-white truncate uppercase tracking-tight group-hover:text-accent transition-colors">{job.title}</div>
+            <div className="text-[10px] text-muted font-black uppercase tracking-widest">{job.company}</div>
         </div>
-        <div className="text-sm font-black text-accent">{job.match_score || 85}%</div>
+        <div className="flex flex-col items-end gap-1">
+            <div className="text-sm font-black text-accent">{job.match_score || 85}% Match</div>
+            <MatchChanceBadge score={job.match_score || 85} />
+        </div>
+        <div className="bg-accent text-black px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all">
+            Apply →
+        </div>
     </div>
 );
 
-export default function Dashboard({ savedJobs, profileText }) {
+export default function Dashboard({ savedJobs, profileText, currentUser }) {
+    const navigate = useNavigate();
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [strategy, setStrategy] = useState("");
-    const [generatingStrategy, setGeneratingStrategy] = useState(false);
     const [curatedJobs, setCuratedJobs] = useState([]);
     const [loadingCurated, setLoadingCurated] = useState(true);
-
-    const getTopMissingSkills = () => {
-        if (!savedJobs || savedJobs.length === 0 || !profileText) return [];
-        const userSkills = profileText.toLowerCase();
-        const counts = {};
-        savedJobs.forEach(job => {
-            if (job.skills) {
-                job.skills.forEach(skill => {
-                    if (!userSkills.includes(skill.toLowerCase())) {
-                        counts[skill] = (counts[skill] || 0) + 1;
-                    }
-                });
-            }
-        });
-        return Object.entries(counts).sort((a,b) => b[1] - a[1]).slice(0, 3).map(([skill]) => skill);
-    };
-
-    const topMissing = getTopMissingSkills();
-
-    const generateSkillStrategy = async () => {
-        if (topMissing.length === 0) return;
-        setGeneratingStrategy(true);
-        try {
-            const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
-            const res = await fetch(`${apiBase}/api/ai/match`, { // Re-using match endpoint for strategy to stay within protected limits
-              method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("token")}` },
-              body: JSON.stringify({ resume: profileText, jobDescription: `Skills missing: ${topMissing.join(', ')}. Strategy needed.` })
-            });
-            const d = await res.json();
-            setStrategy(d.analysis || "Focus on building a portfolio project demonstrating use of these missing libraries/tools first.");
-        } catch (e) { setStrategy("Failed to reach AI advisor."); }
-        setGeneratingStrategy(false);
-    };
 
     useEffect(() => {
         async function fetchAnalytics() {
@@ -106,156 +69,143 @@ export default function Dashboard({ savedJobs, profileText }) {
         fetchAnalytics(); fetchCurated();
     }, []);
 
-    if (loading) return (
-        <div className="space-y-8 py-6 animate-pulse">
-            <div className="h-10 bg-surface w-48 rounded-2xl" />
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                {[1, 2, 3, 4].map(i => <div key={i} className="h-32 bg-surface rounded-[2rem] border border-border/50" />)}
-            </div>
-            <div className="h-64 bg-surface rounded-[2rem]" />
-        </div>
-    );
-
-    const s = data?.summary || { total: 0, offers: 0, interviews: 0, rejections: 0, successRate: 0, avgMatchScore: 0 };
-    const stages = data?.stages || [];
-    const maxStages = stages.length > 0 ? Math.max(...stages.map(st => st.count || 0)) : 1;
-    const scores = data?.scores || [];
-    const maxCount = scores.length > 0 ? Math.max(...scores.map(sd => sd.count || 0)) : 1;
+    const s = data?.summary || { total: 0, offers: 0, interviews: 0, rejections: 0, successRate: 0, avgMatchScore: 78 };
 
     return (
-        <div className="space-y-12 py-4">
-            <div className="flex justify-between items-end">
+        <div className="space-y-12 py-4 max-w-5xl mx-auto">
+            {/* Personalized Header */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
                 <div>
-                    <h1 className="font-syne text-4xl font-black text-white uppercase tracking-tighter mb-2">Carrier Insights</h1>
-                    <p className="text-muted font-medium italic">Real-time metrics for your high-trust job hunt journey</p>
+                    <h1 className="font-syne text-5xl font-black text-white uppercase tracking-tighter mb-2">
+                        👋 Welcome back, {currentUser?.name?.split(' ')[0] || 'Koushik'}
+                    </h1>
+                    <div className="flex items-center gap-3">
+                        <span className="text-accent text-sm font-black uppercase tracking-widest">Decision Engine Online</span>
+                        <div className="h-1 w-1 bg-muted rounded-full" />
+                        <span className="text-muted text-sm font-medium italic">Ready to accelerate your US career logic</span>
+                    </div>
                 </div>
-                <div className="bg-accent/10 text-accent font-black uppercase tracking-[0.2em] text-[10px] px-6 py-2 rounded-full border border-accent/20">
-                    Live Data Pipeline
+                <div className="bg-white/5 border border-white/10 px-6 py-3 rounded-2xl flex items-center gap-4">
+                    <div className="text-right">
+                        <p className="text-[10px] font-black text-muted uppercase tracking-widest">Profile Readiness</p>
+                        <p className="text-sm font-black text-white">{s.avgMatchScore}%</p>
+                    </div>
+                    <div className="h-8 w-px bg-white/10" />
+                    <div className="text-2xl animate-pulse">🎯</div>
                 </div>
-            </div>
-
-            {/* Top Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <StatCard title="Total Decrypted" value={s.total || 0} icon="📤" colorClass="accent" />
-                <StatCard title="Interviews" value={s.interviews || 0} icon="🤝" colorClass="purple" />
-                <StatCard title="Offers Found" value={s.offers || 0} icon="🎉" colorClass="pink" />
-                <StatCard title="Efficiency" value={`${s.successRate || 0}%`} icon="📈" colorClass="accent" />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                {/* Left Column: Pipeline & Skill Dist */}
-                <div className="lg:col-span-7 space-y-8">
-                    {/* Pipeline Health */}
-                    <div className="bg-surface/50 border border-border/50 rounded-[2.5rem] p-10 backdrop-blur-xl">
-                        <h3 className="font-syne text-xl font-black text-white uppercase tracking-tighter mb-8">Pipeline Integrity</h3>
-                        <div>
-                            {stages.map(st => (
-                                <ChartBar
-                                    key={st.stage}
-                                    label={st.stage}
-                                    value={st.count}
-                                    max={maxStages}
-                                    color={st.stage === 'Applied' ? '#c8ff00' : st.stage === 'Interview' ? '#a855f7' : '#ec4899'}
-                                />
-                            ))}
-                            {stages.length === 0 && (
-                                <div className="text-center py-12 text-muted">
-                                    <div className="text-4xl mb-4 grayscale opacity-40">🌑</div>
-                                    <p className="text-xs font-black uppercase tracking-widest italic">No operational data detected.</p>
+                {/* Left Column: Plan & Stats */}
+                <div className="lg:col-span-12 xl:col-span-7 space-y-8">
+                    
+                    {/* Today's Plan */}
+                    <div className="bg-surface/50 border border-border/50 rounded-[2.5rem] p-10 backdrop-blur-xl relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-accent/5 blur-3xl rounded-full transition-transform group-hover:scale-150" />
+                        <h3 className="font-syne text-xl font-black text-white uppercase tracking-tighter mb-8 flex items-center gap-3">
+                            🎯 Today's Tactical Plan
+                        </h3>
+                        <div className="space-y-4">
+                            {[
+                                { task: "Apply to 3 high-match jobs", done: s.total >= 3 },
+                                { task: "Optimize 1 resume section", done: false },
+                                { task: "Update portfolio links", done: true }
+                            ].map((item, i) => (
+                                <div key={i} className={`flex items-center gap-4 p-5 rounded-2xl border transition-all ${item.done ? 'bg-accent/5 border-accent/20 opacity-60' : 'bg-white/5 border-white/5 hover:border-white/20'}`}>
+                                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-black ${item.done ? 'bg-accent text-black' : 'border-2 border-border text-transparent'}`}>✓</div>
+                                    <span className={`text-sm font-bold ${item.done ? 'text-white/50 line-through' : 'text-white'}`}>{item.task}</span>
                                 </div>
-                            )}
+                            ))}
                         </div>
                     </div>
 
-                    {/* Skill Distribution */}
-                    <div className="bg-surface/50 border border-border/50 rounded-[2.5rem] p-10 backdrop-blur-xl">
-                        <div className="flex justify-between items-center mb-8">
-                            <h3 className="font-syne text-xl font-black text-white uppercase tracking-tighter">Skill Alignment Matrix</h3>
-                            <div className="text-[10px] font-black text-accent bg-accent/10 px-4 py-1.5 rounded-full border border-accent/20">AVG {s.avgMatchScore || 0}%</div>
-                        </div>
-
-                        <div className="flex items-flex-end gap-3 h-40 pb-4 border-b border-white/5">
-                            {[...Array(10)].map((_, i) => {
-                                const bucket = i * 10;
-                                const scoreData = scores.find(sd => Number(sd.bucket) === bucket);
-                                const count = scoreData ? scoreData.count : 0;
-                                const height = maxCount > 0 ? (count / maxCount) * 100 : 0;
-
-                                return (
-                                    <div key={bucket} className="flex-1 flex flex-col justify-end items-center gap-2">
-                                        <div 
-                                          className={`w-full rounded-t-lg transition-all duration-1000 ${count > 0 ? (bucket >= 80 ? 'bg-accent' : bucket >= 60 ? 'bg-purple' : 'bg-pink') : 'bg-white/5'}`} 
-                                          style={{ height: `${Math.max(height, 8)}%` }}
-                                        />
-                                        <span className="text-[9px] font-black text-muted">{bucket}</span>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                    {/* Stats Overhaul */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <DashboardStat title="Applications" value={s.total || 0} icon="📤" colorClass="accent" />
+                        <DashboardStat title="Interviews" value={s.interviews || 0} growth="12" icon="🤝" colorClass="purple" />
+                        <DashboardStat title="Match Score" value={`${s.avgMatchScore || 0}%`} growth="4" icon="📈" colorClass="accent" />
                     </div>
+
+                    {/* Assistant Insight */}
+                    <AssistantBubble 
+                        message="Insight: You get 2x more responses from Startups than Big MNCs today. Priority alignment: Scale-ups."
+                        actionLabel="View Startup Jobs"
+                        onAction={() => navigate('/jobs')}
+                    />
                 </div>
 
-                {/* Right Column: Curated Jobs */}
-                <div className="lg:col-span-5 bg-surface/50 border border-border/50 rounded-[2.5rem] p-10 backdrop-blur-xl flex flex-col">
+                {/* Right Column: Top Jobs Today */}
+                <div className="lg:col-span-12 xl:col-span-5 bg-surface/50 border border-border/50 rounded-[2.5rem] p-10 backdrop-blur-xl flex flex-col min-h-[500px]">
                     <div className="flex justify-between items-center mb-8">
-                        <h3 className="font-syne text-xl font-black text-white uppercase tracking-tighter">⚡ Fast Track</h3>
-                        <span className="text-[10px] font-black text-muted uppercase tracking-widest">Market Alpha</span>
+                        <div className="space-y-1">
+                            <h3 className="font-syne text-xl font-black text-white uppercase tracking-tighter">🔥 Top Jobs Today</h3>
+                            <p className="text-[10px] font-black text-muted uppercase tracking-widest italic">Personalized Alignment</p>
+                        </div>
+                        <button onClick={() => navigate('/jobs')} className="text-[10px] font-black text-accent hover:underline uppercase tracking-widest">Explore All</button>
                     </div>
+
                     <div className="space-y-4 flex-1">
                         {loadingCurated ? (
-                            [1,2,3,4].map(i => <div key={i} className="h-20 bg-card/40 rounded-2xl animate-pulse" />)
+                            [1,2,3,4,5].map(i => <div key={i} className="h-20 bg-card/40 rounded-2xl animate-pulse" />)
                         ) : curatedJobs.length > 0 ? (
-                            curatedJobs.map(j => <JobCuratedCard key={j.id} job={j} />)
+                            curatedJobs.slice(0, 5).map(j => <JobCompactRow key={j.id} job={j} onClick={() => navigate('/jobs')} />)
                         ) : (
-                            <div className="text-center py-20 text-muted italic text-[11px] font-black uppercase tracking-widest opacity-50">
-                                Scouting for elite opportunities...
+                            <div className="flex-1 flex flex-col items-center justify-center text-center p-8 grayscale opacity-40 italic">
+                                <span className="text-4xl mb-4">🌑</span>
+                                <p className="text-[10px] font-black uppercase tracking-tighter">Scouting for elite targets...</p>
                             </div>
                         )}
                     </div>
+
+                    {curatedJobs.length > 0 && (
+                        <button 
+                            onClick={() => navigate('/jobs')}
+                            className="mt-8 w-full py-4 bg-white/5 hover:bg-white/10 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all border border-border/50"
+                        >
+                            Intercept More Targets
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {/* Skill Gap Intelligence */}
-            <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-accent/20 to-purple/20 blur-3xl opacity-50 group-hover:opacity-70 transition-opacity" />
-                <div className="relative bg-card/60 border border-white/10 rounded-[3rem] p-12 overflow-hidden backdrop-blur-3xl shadow-2xl">
-                    <div className="flex flex-col md:flex-row gap-12 items-center">
-                        <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-accent to-purple flex items-center justify-center text-5xl shadow-[0_0_50px_rgba(200,255,0,0.3)] animate-bounce-slow flex-shrink-0">🧠</div>
-                        <div className="flex-1 text-center md:text-left">
-                            <h3 className="font-syne text-3xl font-black text-white uppercase tracking-tight mb-4">Skill Gap Intelligence</h3>
-                            
-                            {!savedJobs || savedJobs.length === 0 ? (
-                                <p className="text-muted font-medium text-lg italic">Intercept and save job listings to initialize market requirement analysis.</p>
-                            ) : topMissing.length === 0 ? (
-                                <p className="text-accent font-black text-xl uppercase tracking-tighter">Optimal market alignment detected. Profile covers all technical nodes.</p>
-                            ) : (
-                                <div className="space-y-8">
-                                    <p className="text-white/80 font-medium text-lg leading-relaxed">System analysis of {savedJobs.length} targets identifies consistent gaps in your technical matrix:</p>
-                                    <div className="flex gap-3 flex-wrap justify-center md:justify-start">
-                                        {topMissing.map(skill => (
-                                            <span key={skill} className="px-6 py-2 rounded-full bg-accent text-black font-black uppercase tracking-widest text-[10px] shadow-[0_0_30px_rgba(200,255,0,0.2)]">{skill}</span>
-                                        ))}
-                                    </div>
-                                    {!strategy ? (
-                                        <button 
-                                          onClick={generateSkillStrategy} 
-                                          disabled={generatingStrategy} 
-                                          className="mt-4 bg-white/5 hover:bg-white/10 border border-white/10 px-8 py-4 rounded-2xl text-accent font-black uppercase tracking-widest text-[10px] transition-all disabled:opacity-50"
-                                        >
-                                            {generatingStrategy ? "Simulating Strategy..." : "✨ Calculate Action Plan"}
-                                        </button>
-                                    ) : (
-                                        <div className="mt-8 bg-white/5 border border-white/10 rounded-3xl p-8 text-white/90 text-[13px] font-medium leading-relaxed italic animate-fade-in">
-                                            <div className="text-accent font-black uppercase tracking-widest text-[9px] mb-4 opacity-70">Strategic Protocol // ORION</div>
-                                            {strategy}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
+            {/* Growth Chart Node (Mocked for UI feel) */}
+            <div className="bg-surface/50 border border-border/50 rounded-[3rem] p-12 backdrop-blur-xl">
+                <div className="flex justify-between items-center mb-12">
+                    <h3 className="font-syne text-2xl font-black text-white uppercase tracking-tighter">📈 Weekly Readiness Delta</h3>
+                    <div className="flex gap-4">
+                        {['7 Days', '30 Days', '90 Days'].map(t => (
+                            <button key={t} className={`text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl transition-all ${t === '7 Days' ? 'bg-accent text-black' : 'text-muted hover:text-white'}`}>{t}</button>
+                        ))}
                     </div>
+                </div>
+                <div className="h-64 flex items-end gap-4 pb-8 border-b border-white/5">
+                    {[45, 52, 48, 65, 72, 68, 85].map((val, i) => (
+                        <div key={i} className="flex-1 flex flex-col justify-end items-center gap-4 group">
+                            <div className="text-[10px] font-black text-white opacity-0 group-hover:opacity-100 transition-all mb-2">{val}%</div>
+                            <div 
+                                className={`w-full rounded-t-2xl transition-all duration-1000 ${i === 6 ? 'bg-accent' : 'bg-white/10 group-hover:bg-accent/20'}`}
+                                style={{ height: `${val}%` }}
+                            />
+                            <span className="text-[10px] font-black text-muted uppercase">{['M','T','W','T','F','S','S'][i]}</span>
+                        </div>
+                    ))}
+                </div>
+                <div className="flex justify-between items-center mt-8">
+                    <p className="text-sm text-muted font-medium">Profile completeness increased by <span className="text-accent font-black">+14%</span> since last cycle.</p>
+                    <div className="text-[10px] font-black text-muted uppercase tracking-widest">Market Ready Threshold: 80%</div>
                 </div>
             </div>
         </div>
     );
 }
+
+const StatCardDummy = ({ title, value, icon, colorClass }) => (
+    <div className={`bg-surface border border-border/50 rounded-[2rem] p-8 flex flex-col gap-4 relative overflow-hidden transition-all duration-300 hover:-translate-y-2 group shadow-lg hover:shadow-accent/5`}>
+        <div className="absolute -top-4 -right-4 text-6xl opacity-[0.03] rotate-12 transition-transform group-hover:rotate-0">{icon}</div>
+        <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl bg-${colorClass}/10 flex items-center justify-center text-lg`}>{icon}</div>
+            <span className="text-xs font-black uppercase tracking-widest text-muted">{title}</span>
+        </div>
+        <div className="text-4xl font-syne font-black text-white tracking-tighter">{value}</div>
+    </div>
+);

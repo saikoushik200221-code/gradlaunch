@@ -8,6 +8,8 @@ import Profile from "./components/Profile";
 import Dashboard from "./components/Dashboard";
 import { Routes, Route, useNavigate, useLocation, Navigate } from "react-router-dom";
 import { GoogleLogin } from "@react-oauth/google";
+import Onboarding from "./components/Onboarding";
+import JobView from "./components/JobView";
 
 // ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
 function AuthScreen({ onLogin }) {
@@ -157,6 +159,7 @@ function GradLaunchContent() {
   const [authLoading, setAuthLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [toast, setToast] = useState(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const showToast = (message, type = "success") => {
     setToast({ message, type });
@@ -198,6 +201,7 @@ function GradLaunchContent() {
   function handleLogout() {
     localStorage.removeItem("token");
     setCurrentUser(null);
+    setShowOnboarding(false);
   }
 
   async function handleAddToTracker(job) {
@@ -243,7 +247,15 @@ function GradLaunchContent() {
   }
 
   if (authLoading) return <div className="h-screen bg-background flex items-center justify-center font-syne text-accent animate-pulse uppercase tracking-[0.4em] font-black">Initializing Orion AI...</div>;
-  if (!currentUser) return <AuthScreen onLogin={(user, token) => { localStorage.setItem("token", token); setCurrentUser(user); }} />;
+  
+  if (!currentUser) return <AuthScreen onLogin={(user, token) => { 
+    localStorage.setItem("token", token); 
+    setCurrentUser(user);
+    // If no profile data, trigger onboarding
+    if (!user.hasProfile) setShowOnboarding(true);
+  }} />;
+
+  if (showOnboarding) return <Onboarding onComplete={() => setShowOnboarding(false)} currentUser={currentUser} />;
 
   const TABS = [
     { id: "dashboard", label: "Dashboard", icon: "📊", path: "/" },
@@ -325,6 +337,7 @@ function GradLaunchContent() {
             <Routes>
               <Route path="/" element={<Dashboard savedJobs={savedJobs} profileText={profileText} />} />
               <Route path="/jobs" element={<JobSearch onAddToTracker={handleAddToTracker} onToggleSave={handleToggleSave} savedJobs={savedJobs} profileText={profileText} />} />
+              <Route path="/jobs/:id" element={<JobView onAddToTracker={handleAddToTracker} />} />
               <Route path="/copilot" element={<Copilot />} />
               <Route path="/resume" element={<ResumeTailor initialJobDesc={prefilledJob.description} jobUrl={prefilledJob.link} globalContext={globalProfileContext} />} />
               <Route path="/tracker" element={<AppTracker applications={applications} setApplications={setApplications} />} />

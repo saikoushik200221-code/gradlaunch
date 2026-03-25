@@ -116,3 +116,106 @@ export function Toast({ message, type = "success", onClose }) {
         </div>
     );
 }
+
+export function HeroSection({ title, subtitle, bullets, ctas }) {
+    return (
+        <div className="relative bg-surface/30 border border-border/50 rounded-[3rem] p-12 overflow-hidden mb-12">
+            <div className="absolute top-0 right-0 w-1/2 h-full bg-accent/5 blur-[120px] rounded-full -mr-24 -mt-24 pointer-events-none" />
+            <div className="relative z-10 flex flex-col md:flex-row items-center gap-12">
+                <div className="flex-1 space-y-6">
+                    <h1 className="font-syne text-5xl font-black text-white leading-tight uppercase tracking-tight">
+                        {title}
+                    </h1>
+                    <p className="text-muted text-lg font-medium max-w-xl">
+                        {subtitle}
+                    </p>
+                    <div className="space-y-3">
+                        {bullets.map((b, i) => (
+                            <div key={i} className="flex items-center gap-3 text-white/80 font-bold tracking-tight">
+                                <span className="text-accent">✔</span> {b}
+                            </div>
+                        ))}
+                    </div>
+                    <div className="flex gap-4 pt-4">
+                        {ctas.map((cta, i) => (
+                            <button 
+                                key={i} 
+                                onClick={cta.onClick}
+                                className={`px-8 py-4 rounded-2xl font-syne font-black uppercase tracking-widest text-xs transition-colors ${cta.primary ? 'bg-accent text-black hover:brightness-110' : 'bg-white/5 text-white hover:bg-white/10 border border-border'}`}
+                            >
+                                {cta.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div className="hidden lg:block w-1/3 aspect-square bg-gradient-to-tr from-accent/20 to-purple/20 rounded-[3rem] border border-white/10 flex items-center justify-center text-8xl animate-bounce-slow">
+                    🚀
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export function FlowStepper({ steps, currentStep }) {
+    return (
+        <div className="flex items-center justify-between w-full mb-12 px-4">
+            {steps.map((step, i) => {
+                const isActive = i <= currentStep;
+                const isCurrent = i === currentStep;
+                return (
+                    <React.Fragment key={i}>
+                        <div className="flex flex-col items-center gap-2 group relative">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all duration-500 ${isActive ? 'bg-accent text-black shadow-[0_0_20px_rgba(200,255,0,0.3)]' : 'bg-surface border border-border text-muted opacity-50'}`}>
+                                {i + 1}
+                            </div>
+                            <span className={`text-[10px] font-black uppercase tracking-widest absolute -bottom-6 whitespace-nowrap transition-colors ${isCurrent ? 'text-white' : 'text-muted'}`}>
+                                {step}
+                            </span>
+                        </div>
+                        {i < steps.length - 1 && (
+                            <div className={`flex-1 h-px transition-colors duration-500 mx-4 ${i < currentStep ? 'bg-accent' : 'bg-border'}`} />
+                        )}
+                    </React.Fragment>
+                );
+            })}
+        </div>
+    );
+}
+
+export function MatchBadgeLarge({ score }) {
+    const isHigh = score >= 80;
+    const color = isHigh ? 'text-accent border-accent/20 bg-accent/5' : 'text-purple border-purple/20 bg-purple/5';
+    return (
+        <div className={`flex flex-col items-center p-6 rounded-[2rem] border ${color} transition-all hover:scale-105`}>
+            <span className="text-4xl font-black font-syne">{score}%</span>
+            <span className="text-[10px] font-black uppercase tracking-widest mt-1">Match Score</span>
+        </div>
+    );
+}
+
+export function MatchChanceBadge({ score }) {
+    if (score >= 80) return <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-400">🟢 High Interview Chance</div>;
+    if (score >= 60) return <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-amber-400">🟡 Medium Interview Chance</div>;
+    return <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-pink">🔴 Low Match - Skip</div>;
+}
+
+export function AssistantBubble({ message, actionLabel, onAction }) {
+    return (
+        <div className="bg-gradient-to-r from-accent/10 to-purple/10 border border-white/10 rounded-[2.5rem] p-8 flex items-center gap-8 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-accent/5 blur-3xl rounded-full -mr-16 -mt-16 group-hover:bg-accent/10 transition-colors" />
+            <div className="w-16 h-16 rounded-2xl bg-accent flex items-center justify-center text-3xl animate-bounce-slow flex-shrink-0 shadow-lg shadow-accent/20">💡</div>
+            <div className="flex-1 space-y-2">
+                <span className="text-[10px] font-black text-accent uppercase tracking-[0.2em]">Assistant Insight</span>
+                <p className="text-white text-lg font-medium leading-tight">{message}</p>
+            </div>
+            {actionLabel && (
+                <button 
+                    onClick={onAction}
+                    className="px-6 py-3 bg-white/5 hover:bg-white text-[10px] text-white hover:text-black font-black uppercase tracking-widest rounded-xl border border-white/10 transition-all hover:scale-110 active:scale-95"
+                >
+                    {actionLabel}
+                </button>
+            )}
+        </div>
+    );
+}
