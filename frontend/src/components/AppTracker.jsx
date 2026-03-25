@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { LogoCircle, EmptyState } from "./Common";
+import { LogoCircle, EmptyState, TrustBadge } from "./Common";
 import { TRACKER_STAGES, STAGE_COLORS } from "../theme";
 
 const STAGE_ICONS = { "Wishlist": "⭐", "Applied": "📤", "Phone Screen": "📞", "Interview": "🤝", "Offer 🎉": "🎉", "Rejected": "❌" };
@@ -79,6 +79,22 @@ function AppDetailModal({ app, onClose, onUpdate, C }) {
                                 </button>
                             )}
                             <div style={{ background: `${STAGE_COLORS[app.stage]}15`, color: STAGE_COLORS[app.stage], padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 700, border: `1px solid ${STAGE_COLORS[app.stage]}33` }}>{app.stage}</div>
+                        </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
+                        {app.is_trusted === 1 && <TrustBadge C={C} />}
+                        <div style={{ 
+                            background: app.match_score >= 80 ? `${C.green}15` : `${C.accent}15`, 
+                            color: app.match_score >= 80 ? C.green : C.accent, 
+                            padding: "6px 14px", 
+                            borderRadius: 20, 
+                            fontSize: 12, 
+                            fontWeight: 800, 
+                            border: app.match_score >= 80 ? `1px solid ${C.green}33` : `1px solid ${C.accent}33`,
+                            fontFamily: "'Syne', sans-serif"
+                        }}>
+                            {app.match_score}% Match
                         </div>
                     </div>
 
@@ -286,7 +302,10 @@ export default function AppTracker({ applications, setApplications, C }) {
                                                     <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{app.role}</div>
                                                 </div>
                                             </div>
-                                            <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: C.muted, marginBottom: 8 }}>\uD83D\uDCC5 {app.date}</div>
+                                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                                                <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: C.muted }}>\uD83D\uDCC5 {app.date}</div>
+                                                <div style={{ fontSize: 11, fontWeight: 800, color: app.match_score >= 80 ? C.green : C.accent }}>{app.match_score}% Fit</div>
+                                            </div>
                                             <div style={{ display: "flex", gap: 4 }}>
                                                 {stageIdx > 0 && <button onClick={(e) => { e.stopPropagation(); moveStage(app.id, -1); }} style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 0", color: C.muted, fontSize: 12, cursor: "pointer" }}>\u2190</button>}
                                                 {stageIdx < TRACKER_STAGES.length - 1 && <button onClick={(e) => { e.stopPropagation(); moveStage(app.id, 1); }} style={{ flex: 1, background: `${stageColor}22`, border: `1px solid ${stageColor}44`, borderRadius: 6, padding: "4px 0", color: stageColor, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>\u2192</button>}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { TagBadge, LogoCircle, MatchRing, SkeletonCard, EmptyState } from "./Common";
+import { TagBadge, LogoCircle, MatchRing, SkeletonCard, EmptyState, TrustBadge, RecentlyPostedBadge } from "./Common";
 import { computeSemanticScores } from "../utils/matching";
 
 export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, profileText, C }) {
@@ -9,7 +9,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
 
     const isSaved = (jobId) => savedJobs?.some(sj => sj.id === jobId);
     const [search, setSearch] = useState("");
-    const [filters, setFilters] = useState({ newGrad: false, h1b: false, opt: false, remote: false, onsite: false, fresher: false });
+    const [filters, setFilters] = useState({ newGrad: false, h1b: false, opt: false, remote: false, onsite: false, fresher: false, trustedOnly: false });
     const [roleFilter, setRoleFilter] = useState("All");
     const [expFilter, setExpFilter] = useState("All");
     const [companyTypeFilter, setCompanyTypeFilter] = useState("All");
@@ -34,6 +34,8 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                 if (search) params.append("q", search);
                 if (filters.remote) params.append("remote", "true");
                 if (filters.newGrad) params.append("newGrad", "true");
+                if (filters.trustedOnly) params.append("trustedOnly", "true");
+                if (filters.opt) params.append("sponsorship", "true");
 
                 const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/jobs?${params.toString()}`);
                 if (res.ok) {
@@ -81,30 +83,24 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
         if (!selectedJob) return;
         setAnalyzing(true);
         try {
-            const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/anthropic/messages`, {
+            const token = localStorage.getItem("token");
+            const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/ai/match`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
                 body: JSON.stringify({
-                    model: "claude-sonnet-4-20250514",
-                    max_tokens: 500,
-                    system: "You are Orion, an expert technical recruiter AI. Analyze the fit between the candidate and the job. Be concise. Format as: SCORE: <number 0-100>\\nREASONS:\\n- <reason 1>\\n- <reason 2>\\n- <reason 3>",
-                    messages: [{
-                        role: "user",
-                        content: `Candidate Profile: New Grad, UIUC CS, Skills: Python, Java, React, SQL, Docker. Target: Software Engineer.\\nJob Title: ${selectedJob.title}\\nJob Company: ${selectedJob.company}\\nJob Description: ${selectedJob.description}\\nJob Required Skills: ${selectedJob.skills.join(", ")}`
-                    }]
+                    resume: profileText || "New Grad Software Engineer with React and Node.js experience.",
+                    jobDescription: selectedJob.description
                 })
             });
             const data = await res.json();
-            const text = data.content?.[0]?.text || "";
-            const scoreMatch = text.match(/SCORE:\\s*(\\d+)/);
-            const reasonsMatch = text.match(/REASONS:([^]+)/i);
             setAnalysis({
-                score: scoreMatch ? parseInt(scoreMatch[1]) : selectedJob.match,
-                reasons: reasonsMatch ? reasonsMatch[1].trim().split("\\n").map(r => r.replace(/^[-*]\\s*/, "").trim()).filter(Boolean) : ["Good overall background", "Some skills match"]
+                score: data.score || selectedJob.match,
+                missingSkills: data.missingSkills || [],
+                suggestions: data.suggestions || ["Tailor your summary to match the job title."]
             });
         } catch (e) {
             console.error(e);
-            setAnalysis({ score: selectedJob.match, reasons: ["Could not connect to AI.", "Showing default basic assessment."] });
+            setAnalysis({ score: selectedJob.match, missingSkills: [], suggestions: ["Could not connect to AI."] });
         }
         setAnalyzing(false);
     }
@@ -141,6 +137,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
         if (filter === "New Grad") categoryMatch = j.tags.includes("New Grad") || j.tags.includes("Fresher Friendly");
         if (filter === "Remote") categoryMatch = j.tags.includes("Remote");
         if (filter === "US Only") categoryMatch = j.location.toLowerCase().includes("us") || j.location.toLowerCase().includes("united states") || j.location.toLowerCase().includes("remote");
+        if (filter === "Direct Apply") categoryMatch = j.is_trusted === 1;
 
         const matchRole = roleFilter === "All" || ROLE_KEYWORDS[roleFilter]?.some(kw => titleLower.includes(kw));
         const matchExp = expFilter === "All" || EXP_KEYWORDS[expFilter]?.some(kw => titleLower.includes(kw));
@@ -164,7 +161,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                 />
 
                 <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-                    {["All", "New Grad", "Remote", "US Only"].map(f => (
+                    {["All", "New Grad", "Direct Apply", "Remote"].map(f => (
                         <button
                             key={f}
                             onClick={() => { setFilter(f); setShowSavedOnly(false); }}
@@ -207,7 +204,8 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                     {[
                         ["newGrad", "🎓 New Grad"],
                         ["h1b", "🌐 H1B"],
-                        ["opt", "📋 OPT"],
+                        ["opt", "📋 OPT Friendly"],
+                        ["trustedOnly", "✅ Direct Apply"],
                         ["remote", "🏠 Remote"],
                         ["fresher", "✨ Fresher"],
                     ].map(([key, label]) => (
@@ -338,6 +336,10 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                                 position: "relative"
                             }}
                         >
+                            <div style={{ position: "absolute", top: 12, right: 60, display: "flex", gap: 8 }}>
+                                {job.is_trusted === 1 && <TrustBadge C={C} />}
+                                {(Date.now() - job.posted_value < 48 * 60 * 60 * 1000) && <RecentlyPostedBadge C={C} />}
+                            </div>
                             <div
                                 onClick={(e) => { e.stopPropagation(); onToggleSave(job); }}
                                 style={{ position: "absolute", top: 12, right: 12, cursor: "pointer", fontSize: 18, zIndex: 5, padding: 4, background: `${C.surface}80`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}
@@ -432,6 +434,10 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                                         )}
                                 {selectedJob.tags.filter(t => t !== "OPT Accepted" && t !== "H1B Sponsor").map(t => <TagBadge key={t} label={t} C={C} />)}
                             </div>
+                            <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+                                {selectedJob.is_trusted === 1 && <TrustBadge C={C} />}
+                                {(Date.now() - selectedJob.posted_value < 48 * 60 * 60 * 1000) && <RecentlyPostedBadge C={C} />}
+                            </div>
                         </div>
 
                         <div style={{ padding: 32, flex: 1, overflowY: "auto" }}>
@@ -454,10 +460,40 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                                             </button>
                                         </div>
                                     ) : (
-                                        <div>
-                                            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}>
-                                                {analysis.reasons.map((r, i) => <div key={i} style={{ marginBottom: 8, display: "flex", gap: 8 }}><span style={{ color: C.accent }}>\u2022</span> {r}</div>)}
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                                            {analysis.missingSkills?.length > 0 && (
+                                                <div>
+                                                    <div style={{ fontSize: 11, fontWeight: 800, color: C.red, textTransform: "uppercase", marginBottom: 8 }}>Missing Skills</div>
+                                                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                                        {analysis.missingSkills.map(s => (
+                                                            <span key={s} style={{ background: `${C.red}10`, color: C.red, padding: "4px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700, border: `1px solid ${C.red}20` }}>{s}</span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <div>
+                                                <div style={{ fontSize: 11, fontWeight: 800, color: C.accent, textTransform: "uppercase", marginBottom: 8 }}>Suggestions</div>
+                                                <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}>
+                                                    {analysis.suggestions?.map((s, i) => <div key={i} style={{ marginBottom: 6, display: "flex", gap: 8 }}><span style={{ color: C.accent }}>\u2022</span> {s}</div>)}
+                                                </div>
                                             </div>
+                                            <button 
+                                                onClick={() => onAddToTracker({ ...selectedJob, optimize: true })}
+                                                style={{ 
+                                                    background: "linear-gradient(135deg, #00F0FF, #00A3FF)", 
+                                                    color: "#000", 
+                                                    border: "none", 
+                                                    borderRadius: 12, 
+                                                    padding: "12px", 
+                                                    fontFamily: "'Syne', sans-serif", 
+                                                    fontWeight: 800, 
+                                                    fontSize: 13, 
+                                                    cursor: "pointer",
+                                                    marginTop: 8
+                                                }}
+                                            >
+                                                🪄 Optimize Resume for this Job
+                                            </button>
                                         </div>
                                     )}
                                 </div>

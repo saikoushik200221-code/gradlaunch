@@ -44,11 +44,41 @@ const ChartBar = ({ label, value, max, color, C }) => {
     );
 };
 
+const JobCuratedCard = ({ job, C }) => (
+    <div 
+        onClick={() => window.open(job.link, "_blank")}
+        style={{ 
+            background: C.card, 
+            border: `1px solid ${C.border}`, 
+            borderRadius: 16, 
+            padding: 16, 
+            display: "flex", 
+            alignItems: "center", 
+            gap: 12, 
+            cursor: "pointer",
+            transition: "all 0.2s"
+        }}
+        className="curated-job-card"
+    >
+        <div style={{ width: 32, height: 32, background: `${C.accent}15`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, color: C.accent }}>{job.company?.[0]}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: C.text }}>{job.title}</div>
+            <div style={{ fontSize: 11, color: C.muted }}>{job.company} • {job.location}</div>
+        </div>
+        <div style={{ fontSize: 13, fontWeight: 800, color: C.green }}>{job.match_score || 85}%</div>
+        <style>{`
+            .curated-job-card:hover { transform: translateX(4px); border-color: ${C.accent}44; background: ${C.surface}; }
+        `}</style>
+    </div>
+);
+
 export default function Dashboard({ C, savedJobs, profileText }) {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [strategy, setStrategy] = useState("");
     const [generatingStrategy, setGeneratingStrategy] = useState(false);
+    const [curatedJobs, setCuratedJobs] = useState([]);
+    const [loadingCurated, setLoadingCurated] = useState(true);
 
     const getTopMissingSkills = () => {
         if (!savedJobs || savedJobs.length === 0 || !profileText) return [];
@@ -107,7 +137,19 @@ export default function Dashboard({ C, savedJobs, profileText }) {
             }
             setLoading(false);
         }
+        async function fetchCurated() {
+            try {
+                const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/jobs/curated`, {
+                    headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+                });
+                if (res.ok) setCuratedJobs(await res.json());
+            } catch (e) {
+                console.error("Curated fetch failed", e);
+            }
+            setLoadingCurated(false);
+        }
         fetchAnalytics();
+        fetchCurated();
     }, []);
 
     if (loading) return (
@@ -121,12 +163,8 @@ export default function Dashboard({ C, savedJobs, profileText }) {
     );
 
     const s = data?.summary || { total: 0, offers: 0, interviews: 0, rejections: 0, successRate: 0, avgMatchScore: 0 };
-
-    // Defensive check for stages array
     const stages = data?.stages || [];
     const maxStages = stages.length > 0 ? Math.max(...stages.map(st => st.count || 0)) : 1;
-
-    // Defensive check for scores array
     const scores = data?.scores || [];
     const maxCount = scores.length > 0 ? Math.max(...scores.map(sd => sd.count || 0)) : 1;
 
@@ -150,63 +188,89 @@ export default function Dashboard({ C, savedJobs, profileText }) {
                 <StatCard title="Success Rate" value={`${s.successRate || 0}%`} icon="📈" color={C.yellow} C={C} />
             </div>
 
-            {/* Charts Row */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
-                {/* Pipeline Health */}
-                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 32, padding: 32 }}>
-                    <h3 style={{ margin: "0 0 24px 0", fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800 }}>Pipeline Health</h3>
-                    <div style={{ display: "flex", flexDirection: "column" }}>
-                        {stages.map(st => (
-                            <ChartBar
-                                key={st.stage}
-                                label={st.stage}
-                                value={st.count}
-                                max={maxStages}
-                                color={STAGE_COLORS[st.stage] || C.accent}
-                                C={C}
-                            />
-                        ))}
-                        {stages.length === 0 && (
-                            <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>
-                                <div style={{ fontSize: 40, marginBottom: 12 }}>🌑</div>
-                                No application data yet. Start tracking to see your pipeline health!
-                            </div>
-                        )}
+            <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: 32 }}>
+                {/* Pipeline Health & Match Distribution column */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
+                    {/* Pipeline Health */}
+                    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 32, padding: 32 }}>
+                        <h3 style={{ margin: "0 0 24px 0", fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800 }}>Pipeline Health</h3>
+                        <div style={{ display: "flex", flexDirection: "column" }}>
+                            {stages.map(st => (
+                                <ChartBar
+                                    key={st.stage}
+                                    label={st.stage}
+                                    value={st.count}
+                                    max={maxStages}
+                                    color={STAGE_COLORS[st.stage] || C.accent}
+                                    C={C}
+                                />
+                            ))}
+                            {stages.length === 0 && (
+                                <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>
+                                    <div style={{ fontSize: 40, marginBottom: 12 }}>🌑</div>
+                                    No application data yet. Start tracking to see your pipeline health!
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Match Score Distribution */}
+                    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 32, padding: 32 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                            <h3 style={{ margin: 0, fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800 }}>Skill Alignment</h3>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: C.accent, background: `${C.accent}10`, padding: "4px 10px", borderRadius: 8 }}>Avg {s.avgMatchScore || 0}%</div>
+                        </div>
+
+                        <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 180, paddingBottom: 20, borderBottom: `1px solid ${C.border}` }}>
+                            {[...Array(10)].map((_, i) => {
+                                const bucket = i * 10;
+                                const scoreData = scores.find(sd => Number(sd.bucket) === bucket);
+                                const count = scoreData ? scoreData.count : 0;
+                                const height = maxCount > 0 ? (count / maxCount) * 100 : 0;
+
+                                return (
+                                    <div key={bucket} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                                        <div style={{
+                                            width: "100%",
+                                            height: `${Math.max(height, 5)}%`,
+                                            background: count > 0 ? (bucket >= 80 ? C.green : bucket >= 60 ? C.accent : C.yellow) : C.border,
+                                            borderRadius: "4px 4px 0 0",
+                                            opacity: count > 0 ? 1 : 0.2,
+                                            transition: "height 1s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
+                                        }} />
+                                        <span style={{ fontSize: 9, color: C.muted, fontWeight: 700 }}>{bucket}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
 
-                {/* Match Score Distribution */}
-                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 32, padding: 32 }}>
+                {/* Top Jobs for You */}
+                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 32, padding: 32, display: "flex", flexDirection: "column" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-                        <h3 style={{ margin: 0, fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800 }}>Skill Alignment</h3>
-                        <div style={{ fontSize: 12, fontWeight: 800, color: C.accent, background: `${C.accent}10`, padding: "4px 10px", borderRadius: 8 }}>Avg {s.avgMatchScore || 0}%</div>
+                        <h3 style={{ margin: 0, fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800 }}>⚡ Jobs for You</h3>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, textTransform: "uppercase" }}>Updated Daily</div>
                     </div>
-
-                    <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 180, paddingBottom: 20, borderBottom: `1px solid ${C.border}` }}>
-                        {[...Array(10)].map((_, i) => {
-                            const bucket = i * 10;
-                            const scoreData = scores.find(sd => Number(sd.bucket) === bucket);
-                            const count = scoreData ? scoreData.count : 0;
-                            const height = maxCount > 0 ? (count / maxCount) * 100 : 0;
-
-                            return (
-                                <div key={bucket} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                                    <div style={{
-                                        width: "100%",
-                                        height: `${Math.max(height, 5)}%`,
-                                        background: count > 0 ? (bucket >= 80 ? C.green : bucket >= 60 ? C.accent : C.yellow) : C.border,
-                                        borderRadius: "4px 4px 0 0",
-                                        opacity: count > 0 ? 1 : 0.2,
-                                        transition: "height 1s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
-                                    }} />
-                                    <span style={{ fontSize: 9, color: C.muted, fontWeight: 700 }}>{bucket}</span>
-                                </div>
-                            );
-                        })}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12, flex: 1 }}>
+                        {loadingCurated ? (
+                            [1,2,3].map(i => <div key={i} style={{ height: 60, background: C.card, borderRadius: 16, opacity: 0.3 }} />)
+                        ) : curatedJobs.length > 0 ? (
+                            curatedJobs.map(j => <JobCuratedCard key={j.id} job={j} C={C} />)
+                        ) : (
+                            <div style={{ textAlign: "center", padding: "20px 0", color: C.muted, fontSize: 13 }}>
+                                No curated jobs for today. Check back later!
+                            </div>
+                        )}
                     </div>
-                    <p style={{ marginTop: 20, fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
-                        Shows how well your profile matches the jobs you've applied for. Aim for 80%+ for best results.
-                    </p>
+                    {curatedJobs.length > 0 && (
+                        <button 
+                            style={{ marginTop: 20, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px", color: C.text, fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all 0.2s" }}
+                            onClick={() => window.location.hash = "#job-search"}
+                        >
+                            View All Jobs
+                        </button>
+                    )}
                 </div>
             </div>
 

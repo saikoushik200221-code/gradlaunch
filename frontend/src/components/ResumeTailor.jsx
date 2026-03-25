@@ -26,8 +26,16 @@ export default function ResumeTailor({ initialJobDesc, jobUrl, globalContext, C 
     }, [globalContext]);
 
     useEffect(() => {
-        if (initialJobDesc) setJobDesc(initialJobDesc);
-    }, [initialJobDesc]);
+        if (initialJobDesc?.description) {
+            setJobDesc(initialJobDesc.description);
+            if (initialJobDesc.optimize && background) {
+                // Auto-trigger analysis if redirected with optimize flag
+                analyzeDeepMatch(initialJobDesc.description);
+            }
+        } else if (typeof initialJobDesc === 'string') {
+            setJobDesc(initialJobDesc);
+        }
+    }, [initialJobDesc, background]);
 
     async function tailorResume() {
         if (!background || background.trim() === "") {
@@ -86,27 +94,53 @@ ${jobDesc}`
         setLoading(false);
     }
 
-    async function analyzeDeepMatch() {
+    async function analyzeDeepMatch(overrideJD) {
+        const targetJD = overrideJD || jobDesc;
         if (!background || background.trim() === "") { setError("Provide 'Your Background' first."); return; }
         setAnalyzingMatch(true); setError(""); setMatchAnalysis(null);
         try {
+            const token = localStorage.getItem("token");
             const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
-            const res = await fetch(`${apiBase}/api/anthropic/messages`, {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    model: "claude-sonnet-4-20250514", max_tokens: 1000,
-                    messages: [{
-                        role: "user",
-                        content: `You are an expert recruiter.\nCompare the following resume and job description.\nReturn strictly JSON format ONLY without markdown:\n{\n  "score": 85,\n  "missing_skills": ["Skill1", "Skill2"],\n  "strengths": ["Strength1", "Strength2"],\n  "suggestions": ["Suggestion1", "Suggestion2"]\n}\n\nResume:\n${background}\n\nJob Description:\n${jobDesc}`
-                    }]
-                })
+            const res = await fetch(`${apiBase}/api/ai/match`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                body: JSON.stringify({ resume: background, jobDescription: targetJD })
             });
             const data = await res.json();
-            const text = data.content?.[0]?.text || "";
-            const jsonMatch = text.match(/\{[\s\S]*\}/);
-            if (jsonMatch) setMatchAnalysis(JSON.parse(jsonMatch[0]));
-        } catch (e) { setError("Failed to analyze match."); }
+            if (data.error) throw new Error(data.error);
+            setMatchAnalysis({
+                score: data.score,
+                missing_skills: data.missingSkills,
+                strengths: ["Strong match for core requirements"], // Heuristic or can be enhanced
+                suggestions: data.suggestions
+            });
+        } catch (e) { 
+            console.error(e);
+            setError("Failed to analyze match."); 
+        }
         setAnalyzingMatch(false);
+    }
+
+    const [optimizing, setOptimizing] = useState(false);
+    const [optimizationTips, setOptimizationTips] = useState(null);
+
+    async function getOptimizationTips() {
+        if (!background || !jobDesc) return;
+        setOptimizing(true);
+        try {
+            const token = localStorage.getItem("token");
+            const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+            const res = await fetch(`${apiBase}/api/ai/optimize`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                body: JSON.stringify({ resume: background, jobDescription: jobDesc })
+            });
+            const data = await res.json();
+            setOptimizationTips(data);
+        } catch (e) {
+            console.error(e);
+        }
+        setOptimizing(false);
     }
 
     async function improveBulletAction() {
@@ -260,14 +294,38 @@ ${jobDesc}`
                                     {matchAnalysis.missing_skills?.map((s, idx) => <div key={idx} style={{ color: C.text, fontSize: 13, marginBottom: 4 }}>• {s}</div>)}
                                 </div>
                                 <div>
-                                    <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Key Strengths</div>
-                                    {matchAnalysis.strengths?.map((s, idx) => <div key={idx} style={{ color: C.green, fontSize: 13, marginBottom: 4 }}>• {s}</div>)}
+                                    <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Strategy</div>
+                                    {matchAnalysis.suggestions?.map((s, idx) => <div key={idx} style={{ color: C.text, fontSize: 13, marginBottom: 4 }}>• {s}</div>)}
                                 </div>
                             </div>
-                            <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
-                                <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Improvement Suggestions</div>
-                                {matchAnalysis.suggestions?.map((s, idx) => <div key={idx} style={{ color: C.text, fontSize: 13, marginBottom: 4 }}>• {s}</div>)}
-                            </div>
+                            
+                            {!optimizationTips ? (
+                                <button 
+                                    onClick={getOptimizationTips}
+                                    disabled={optimizing}
+                                    style={{ marginTop: 20, width: "100%", background: "linear-gradient(135deg, #00F0FF, #00A3FF)", color: "#000", border: "none", borderRadius: 12, padding: "12px", fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 13, cursor: optimizing ? "wait" : "pointer" }}
+                                >
+                                    {optimizing ? "🔮 Generating Optimization Tips..." : "🪄 Get Specific Bullet Point Tips"}
+                                </button>
+                            ) : (
+                                <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
+                                    <div style={{ fontSize: 11, fontWeight: 800, color: C.accent, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Optimization Roadmap</div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                        {optimizationTips.add?.length > 0 && (
+                                            <div>
+                                                <div style={{ fontSize: 11, fontWeight: 700, color: C.green, marginBottom: 4 }}>Add these bullets:</div>
+                                                {optimizationTips.add.map((b, i) => <div key={i} style={{ fontSize: 12, color: C.text, paddingLeft: 8, borderLeft: `2px solid ${C.green}33`, marginBottom: 4 }}>{b}</div>)}
+                                            </div>
+                                        )}
+                                        {optimizationTips.remove?.length > 0 && (
+                                            <div>
+                                                <div style={{ fontSize: 11, fontWeight: 700, color: C.red, marginBottom: 4 }}>Remove/Replace:</div>
+                                                {optimizationTips.remove.map((b, i) => <div key={i} style={{ fontSize: 12, color: C.muted, paddingLeft: 8, borderLeft: `2px solid ${C.red}33`, marginBottom: 4, textDecoration: 'line-through' }}>{b}</div>)}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 

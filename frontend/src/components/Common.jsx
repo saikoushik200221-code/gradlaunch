@@ -123,6 +123,49 @@ export function EmptyState({ icon, title, description, C }) {
     );
 }
 
+export function TrustBadge({ C }) {
+    return (
+        <div style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "4px",
+            background: "linear-gradient(135deg, #00F0FF20, #00A3FF20)",
+            border: `1px solid #00F0FF44`,
+            borderRadius: "8px",
+            padding: "4px 10px",
+            color: "#00F0FF",
+            fontSize: "11px",
+            fontWeight: "800",
+            fontFamily: "'Syne', sans-serif",
+            textTransform: "uppercase",
+            letterSpacing: "0.5px",
+            boxShadow: "0 0 15px #00F0FF22"
+        }}>
+            <span style={{ fontSize: "14px" }}>\u2705</span> Direct Apply
+        </div>
+    );
+}
+
+export function RecentlyPostedBadge({ C, hours = 48 }) {
+    return (
+        <div style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "4px",
+            background: "rgba(16, 185, 129, 0.1)",
+            border: "1px solid rgba(16, 185, 129, 0.3)",
+            borderRadius: "8px",
+            padding: "4px 10px",
+            color: "#10B981",
+            fontSize: "11px",
+            fontWeight: "700",
+            fontFamily: "'DM Sans', sans-serif"
+        }}>
+            <span style={{ fontSize: "12px" }}>\uD83D\uDD25</span> Fresh Post
+        </div>
+    );
+}
+
 export function Toast({ message, type = "success", onClose, C }) {
     const color = type === "success" ? C.green : C.red;
     return (

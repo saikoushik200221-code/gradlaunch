@@ -314,7 +314,8 @@ function GradLaunchContent() {
             logo: job.logo,
             stage,
             job_link: job.link,
-            match_score: job.match || 85
+            match_score: job.match || 85,
+            is_trusted: job.is_trusted || 0
           })
         });
         if (res.ok) {
@@ -333,7 +334,7 @@ function GradLaunchContent() {
     if (job.wishlist) {
       navigate("/tracker");
     } else {
-      setPrefilledJob({ description: job.description, link: job.link });
+      setPrefilledJob({ description: job.description, link: job.link, optimize: !!job.optimize });
       navigate("/resume");
     }
   }

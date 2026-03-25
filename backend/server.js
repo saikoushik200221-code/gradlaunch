@@ -154,13 +154,16 @@ async function initDb() {
     await db.exec(`
         CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT, email TEXT UNIQUE, password TEXT, profile TEXT);
         CREATE TABLE IF NOT EXISTS saved_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, job_id TEXT, job_data TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, job_id));
-        CREATE TABLE IF NOT EXISTS applications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, company TEXT, role TEXT, logo TEXT, stage TEXT, notes TEXT, job_link TEXT, match_score INTEGER, interview_date TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS applications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, company TEXT, role TEXT, logo TEXT, stage TEXT, notes TEXT, job_link TEXT, match_score INTEGER, is_trusted INTEGER DEFAULT 0, interview_date TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS application_history (id INTEGER PRIMARY KEY AUTOINCREMENT, app_id INTEGER, stage TEXT, date TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
-        CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, title TEXT, company TEXT, location TEXT, type TEXT, salary TEXT, salary_min INTEGER, salary_max INTEGER, tags TEXT, skills TEXT, description TEXT, link TEXT, posted TEXT, posted_value INTEGER, embedding TEXT, logo TEXT, match_score INTEGER, source TEXT, sponsorship_friendly INTEGER, company_type TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)
+        CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, title TEXT, company TEXT, location TEXT, type TEXT, salary TEXT, salary_min INTEGER, salary_max INTEGER, tags TEXT, skills TEXT, description TEXT, link TEXT, posted TEXT, posted_value INTEGER, embedding TEXT, logo TEXT, match_score INTEGER, source TEXT, sponsorship_friendly INTEGER, company_type TEXT, is_trusted INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)
     `);
     try { await db.exec(`CREATE INDEX IF NOT EXISTS idx_jobs_company_title ON jobs(company, title)`); } catch (e) { }
     
-    // Migration: Update existing company types with refined classifier
+    // Migration: add is_trusted column to jobs
+    try { await db.exec(`ALTER TABLE jobs ADD COLUMN is_trusted INTEGER DEFAULT 0`); } catch (e) { }
+    
+    try { await db.exec(`ALTER TABLE applications ADD COLUMN is_trusted INTEGER DEFAULT 0`); } catch (e) { }
     try {
         const allJobs = await db.all("SELECT id, company, source FROM jobs");
         for (const job of allJobs) {
@@ -471,6 +474,36 @@ app.post('/api/applications', authenticateToken, async (req, res) => {
     } catch (err) {
         console.error('Create application error:', err);
         res.status(500).json({ error: 'Error creating application' });
+    }
+});
+
+app.get('/api/jobs/curated', authenticateToken, async (req, res) => {
+    try {
+        const user = await db.get('SELECT profile FROM users WHERE id = ?', [req.user.id]);
+        const profile = user?.profile?.toLowerCase() || "";
+        
+        // Curation Logic: Trusted, Recent, and potentially matching keywords from profile
+        // We'll use a simple keyword match for now, or just high-quality fresh jobs
+        let query = `
+            SELECT * FROM jobs 
+            WHERE is_trusted = 1 
+            AND posted_value > ? 
+            ORDER BY posted_value DESC 
+            LIMIT 10
+        `;
+        const fortyEightHoursAgo = Date.now() - (48 * 60 * 60 * 1000);
+        const jobs = await db.all(query, [fortyEightHoursAgo]);
+
+        // If not enough jobs, relax the time constraint
+        if (jobs.length < 5) {
+            const fiveDaysAgo = Date.now() - (5 * 24 * 60 * 60 * 1000);
+            return res.json(await db.all(`SELECT * FROM jobs WHERE is_trusted = 1 AND posted_value > ? ORDER BY posted_value DESC LIMIT 10`, [fiveDaysAgo]));
+        }
+
+        res.json(jobs);
+    } catch (err) {
+        console.error('Curated jobs error:', err);
+        res.status(500).json({ error: 'Failed to fetch curated jobs' });
     }
 });
 
@@ -1262,16 +1295,18 @@ async function runJobScraper() {
         for (const j of newJobs) {
             try {
                 const s = parseSalaryRange(j.salary);
+                const isTrusted = isTrustedJob(j) ? 1 : 0;
                 await db.run(`
                     INSERT OR IGNORE INTO jobs (
                         id, title, company, location, type, salary, salary_min, salary_max, 
-                        tags, skills, description, link, posted, posted_value, logo, source, sponsorship_friendly, company_type
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        tags, skills, description, link, posted, posted_value, logo, source, sponsorship_friendly, company_type, is_trusted
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `, [
                     j.id, j.title, j.company, j.location, j.type, j.salary, s.min, s.max,
                     JSON.stringify(j.tags), JSON.stringify(j.skills), j.description, j.link, j.posted, j.postedValue, j.logo, j.source || 'Aggregator',
                     j.sponsorship_friendly || 0,
-                    classifyCompany(j.company, j.source)
+                    classifyCompany(j.company, j.source),
+                    isTrusted
                 ]);
             } catch (err) {
                 console.error(`Error saving job ${j.id}:`, err.message);
@@ -1343,7 +1378,7 @@ cron.schedule('0 8 * * *', async () => {
 
 app.get('/api/jobs', async (req, res) => {
     try {
-        const { q, remote, newGrad, sponsorship } = req.query;
+        const { q, remote, newGrad, sponsorship, trustedOnly } = req.query;
         let query = 'SELECT * FROM jobs';
         const params = [];
         const conditions = [];
@@ -1360,7 +1395,10 @@ app.get('/api/jobs', async (req, res) => {
             conditions.push('(tags LIKE "%New Grad%" OR tags LIKE "%Fresher%")');
         }
         if (sponsorship === 'true') {
-            conditions.push('(sponsorship_friendly = 1 OR tags LIKE "%Sponsor%" OR tags LIKE "%Visa%")');
+            conditions.push('(sponsorship_friendly = 1 OR tags LIKE "%Sponsor%" OR tags LIKE "%Visa%" OR tags LIKE "%OPT%")');
+        }
+        if (trustedOnly === 'true') {
+            conditions.push('is_trusted = 1');
         }
 
         if (conditions.length > 0) {
@@ -1436,20 +1474,46 @@ function isUSJob(job) {
     if (NON_US.some(kw => loc.includes(kw))) return false;
     if (US_KEYWORDS.some(kw => loc.includes(kw))) return true;
     
-    // Default to false for jobs with missing locations (strict safety)
     return false; 
+}
+
+const trustedDomains = [
+  "greenhouse.io",
+  "lever.co",
+  "ashbyhq.com",
+  "jobs.workday.com",
+  "careers.",
+  "boards.greenhouse.io",
+  "jobs.lever.co",
+  "apply.workable.com"
+];
+
+function isTrustedJob(job) {
+  const url = (job.link || "").toLowerCase();
+  return trustedDomains.some(domain => url.includes(domain));
 }
 
 function analyzeSponsorship(title, desc) {
     const text = (title + " " + desc).toLowerCase();
-    const positive = ["h1b", "sponsorship available", "visa sponsorship", "h-1b", "opt friendly", "cpt friendly", "sponsorship provided"];
-    const negative = ["no sponsorship", "cannot sponsor", "not able to sponsor", "citizen only", "us citizen only"];
+    const positive = [
+        "h1b", "sponsorship available", "visa sponsorship", "h-1b", 
+        "opt friendly", "cpt friendly", "sponsorship provided",
+        "opt accepted", "cpt accepted", "e-verify"
+    ];
+    const negative = [
+        "no sponsorship", "cannot sponsor", "not able to sponsor", 
+        "citizen only", "us citizen only", "green card only",
+        "legal authorization to work in the us without sponsorship"
+    ];
     
     // Check negatives first
     if (negative.some(word => text.includes(word))) return 0;
     // Check positives
     if (positive.some(word => text.includes(word))) return 1;
-    // Heuristic: Mention of "Visa" usually implies we should look closer, but mark as 0 if unsure
+    
+    // If text mentions OPT or E-Verify, it's highly likely to be friendly
+    if (text.includes("opt") || text.includes("e-verify")) return 1;
+
     return 0;
 }
 
@@ -1726,6 +1790,97 @@ app.get('/sitemap.xml', async (req, res) => {
     } catch (err) {
         console.error('Sitemap error:', err);
         res.status(500).send('Error generating sitemap');
+    }
+});
+
+// --- AI MATCHING & OPTIMIZATION ---
+app.post('/api/ai/match', authenticateToken, async (req, res) => {
+    const { resume, jobDescription } = req.body;
+    if (!resume || !jobDescription) return res.status(400).json({ error: 'Missing resume or job description' });
+
+    if (!GEMINI_API_KEY) {
+        return res.json({
+            score: 75,
+            missingSkills: ["Kubernetes", "System Design"],
+            suggestions: ["Add REST API scaling experience", "Highlight AWS projects"]
+        });
+    }
+
+    try {
+        const prompt = `
+            Analyze the fit between this Resume and Job Description.
+            Return ONLY a JSON object with this structure:
+            {
+              "score": <number 0-100>,
+              "missingSkills": ["skill1", "skill2"],
+              "suggestions": ["suggestion1", "suggestion2"]
+            }
+
+            Resume: ${resume.slice(0, 4000)}
+            JD: ${jobDescription.slice(0, 4000)}
+        `;
+
+        const geminiPayload = {
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { response_mime_type: "application/json" }
+        };
+
+        const response = await axios.post(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+            geminiPayload,
+            { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
+        );
+
+        const aiText = response.data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+        res.json(JSON.parse(aiText));
+    } catch (err) {
+        console.error('AI Match error:', err.message);
+        res.status(500).json({ error: 'AI Matching failed' });
+    }
+});
+
+app.post('/api/ai/optimize', authenticateToken, async (req, res) => {
+    const { resume, jobDescription } = req.body;
+    if (!resume || !jobDescription) return res.status(400).json({ error: 'Missing resume or job description' });
+
+    if (!GEMINI_API_KEY) {
+        return res.json({
+            add: ["Built scalable REST APIs handling 10k requests/min", "Improved latency by 30%"],
+            remove: ["Outdated tech (jQuery)"],
+            reorder: ["Put backend projects first"]
+        });
+    }
+
+    try {
+        const prompt = `
+            Suggest specific improvements to this Resume to better match this Job Description.
+            Return ONLY a JSON object with this structure:
+            {
+              "add": ["bullet point 1", "bullet point 2"],
+              "remove": ["item to remove 1"],
+              "reorder": ["instruction 1"]
+            }
+
+            Resume: ${resume.slice(0, 4000)}
+            JD: ${jobDescription.slice(0, 4000)}
+        `;
+
+        const geminiPayload = {
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { response_mime_type: "application/json" }
+        };
+
+        const response = await axios.post(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+            geminiPayload,
+            { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
+        );
+
+        const aiText = response.data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+        res.json(JSON.parse(aiText));
+    } catch (err) {
+        console.error('AI Optimize error:', err.message);
+        res.status(500).json({ error: 'AI Optimization failed' });
     }
 });
 
