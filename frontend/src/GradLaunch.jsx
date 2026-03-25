@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
-import { COLORS, LIGHT_COLORS, FONTS, SHADOWS } from "./theme";
+import React, { useState, useEffect } from "react";
 import { Toast } from "./components/Common";
 import JobSearch from "./components/JobSearch";
 import AppTracker from "./components/AppTracker";
@@ -7,49 +6,30 @@ import ResumeTailor from "./components/ResumeTailor";
 import Copilot from "./components/Copilot";
 import Profile from "./components/Profile";
 import Dashboard from "./components/Dashboard";
-import JobView from "./components/JobView";
 import { Routes, Route, useNavigate, useLocation, Navigate } from "react-router-dom";
 import { GoogleLogin } from "@react-oauth/google";
 
-
 // ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
-function AuthScreen({ onLogin, C }) {
+function AuthScreen({ onLogin }) {
   const [isRegister, setIsRegister] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [passFeedback, setPassFeedback] = useState("");
-
-  const validatePassword = (pass) => {
-    if (pass.length < 8) return "Min 8 characters required";
-    if (!/[A-Z]/.test(pass)) return "Add an uppercase letter";
-    if (!/[0-9]/.test(pass)) return "Add a number";
-    return "";
-  };
-
-  const handleGuestEntry = () => {
-    onLogin({ name: "Guest Explorer", email: "guest@gradlaunch.ai" }, "demo-token");
-  };
 
   async function handleGoogleLogin(credentialResponse) {
     setLoading(true);
     setError("");
     try {
-      const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+      const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
       const res = await fetch(`${apiBase}/api/auth/google`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ credential: credentialResponse.credential })
       });
       const data = await res.json();
-      if (res.ok) {
-        onLogin(data.user, data.token);
-      } else {
-        setError(data.error || "Google authentication failed");
-      }
-    } catch (err) {
-      setError("Server connection failed");
-    }
+      if (res.ok) onLogin(data.user, data.token);
+      else setError(data.error || "Google Sign-In failed");
+    } catch (err) { setError("Server connection failed"); }
     setLoading(false);
   }
 
@@ -59,141 +39,82 @@ function AuthScreen({ onLogin, C }) {
     setError("");
     const endpoint = isRegister ? "register" : "login";
     try {
-      const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+      const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
       const res = await fetch(`${apiBase}/api/auth/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form)
       });
       const data = await res.json();
-      if (res.ok) {
-        onLogin(data.user, data.token);
-      } else {
-        setError(data.error || "Authentication failed");
-      }
-    } catch (err) {
-      setError("Server connection failed");
-    }
+      if (res.ok) onLogin(data.user, data.token);
+      else setError(data.error || "Authentication failed");
+    } catch (err) { setError("Server connection failed"); }
     setLoading(false);
   }
 
   return (
-    <div style={{ height: "100vh", background: "#04060A", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      {/* Background Glows */}
-      <div style={{ position: "absolute", top: "-10%", left: "-10%", width: "50%", height: "50%", background: "radial-gradient(circle, #00F0FF15 0%, transparent 70%)", filter: "blur(80px)" }} />
-      <div style={{ position: "absolute", bottom: "-10%", right: "-10%", width: "50%", height: "50%", background: "radial-gradient(circle, #00A3FF15 0%, transparent 70%)", filter: "blur(80px)" }} />
+    <div className="min-h-screen bg-background flex items-center justify-center p-6 relative overflow-hidden">
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-accent/5 blur-[120px] rounded-full" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple/5 blur-[120px] rounded-full" />
 
-      <div style={{ position: "relative", width: "100%", maxWidth: 440, padding: 40, background: "#0D1117", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 32, boxShadow: "0 24px 80px rgba(0,0,0,0.5)" }}>
-        <div style={{ textAlign: "center", marginBottom: 40 }}>
-          <div style={{ fontSize: 56, marginBottom: 20 }}>🚀</div>
-          <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: 32, fontWeight: 800, color: "#fff", margin: "0 0 10px 0" }}>
-            {isRegister ? "Join GradLaunch" : "Welcome Back"}
+      <div className="relative w-full max-w-md bg-card/40 border border-border/50 backdrop-blur-2xl rounded-[3rem] p-10 shadow-2xl animate-slide-up">
+        <div className="text-center mb-10">
+          <div className="text-6xl mb-6 animate-bounce-slow">🚀</div>
+          <h1 className="font-syne text-4xl font-black text-white mb-2 uppercase tracking-tight">
+            {isRegister ? "Join Elite" : "Welcome Back"}
           </h1>
-          <p style={{ fontFamily: "'DM Sans', sans-serif", color: "#94A3B8", fontSize: 16 }}>
-            {isRegister ? "Start your elite career journey today" : "Orion AI is waiting for you"}
+          <p className="text-muted font-medium text-sm italic">
+            {isRegister ? "Accelerating your US career logic" : "Orion AI is online and ready"}
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {error && <div style={{ color: "#FF3B30", background: "rgba(255, 59, 48, 0.1)", border: "1px solid rgba(255, 59, 48, 0.3)", borderRadius: 12, padding: 12, fontSize: 13, textAlign: "center" }}>{error}</div>}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {error && <div className="bg-pink/10 border border-pink/30 text-pink text-xs py-3 px-4 rounded-2xl text-center font-bold tracking-tight">{error}</div>}
+          
           {isRegister && (
             <input
-              required
-              placeholder="Full Name"
-              value={form.name}
-              onChange={e => setForm({ ...form, name: e.target.value })}
-              style={{ background: "#161B22", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 14, padding: "16px 20px", color: "#fff", fontFamily: "'DM Sans', sans-serif", fontSize: 15, outline: "none" }}
+              required placeholder="Full Name"
+              className="w-full bg-surface/50 border border-border/60 rounded-2xl py-4 px-6 text-white text-sm outline-none focus:border-accent/40 transition-all placeholder:text-muted/50"
+              value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
             />
           )}
+
           <input
-            required
-            type="email"
-            placeholder="Email Address"
-            value={form.email}
-            onChange={e => setForm({ ...form, email: e.target.value })}
-            style={{ background: "#161B22", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 14, padding: "16px 20px", color: "#fff", fontFamily: "'DM Sans', sans-serif", fontSize: 15, outline: "none" }}
+            required type="email" placeholder="Email Address"
+            className="w-full bg-surface/50 border border-border/60 rounded-2xl py-4 px-6 text-white text-sm outline-none focus:border-accent/40 transition-all placeholder:text-muted/50"
+            value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
           />
+
           <input
-            required
-            type="password"
-            placeholder="Password"
-            value={form.password}
-            onChange={e => {
-              setForm({ ...form, password: e.target.value });
-              setPassFeedback(validatePassword(e.target.value));
-            }}
-            style={{ background: "#161B22", border: `1px solid ${passFeedback && isRegister ? "#FF3B30" : "rgba(255,255,255,0.1)"}`, borderRadius: 14, padding: "16px 20px", color: "#fff", fontFamily: "'DM Sans', sans-serif", fontSize: 15, outline: "none" }}
+            required type="password" placeholder="Password"
+            className="w-full bg-surface/50 border border-border/60 rounded-2xl py-4 px-6 text-white text-sm outline-none focus:border-accent/40 transition-all placeholder:text-muted/50"
+            value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
           />
-          {isRegister && passFeedback && (
-            <div style={{ fontSize: 11, color: "#FF3B30", marginTop: -8, marginLeft: 10 }}>{passFeedback}</div>
-          )}
 
-          <button
-            disabled={loading || (isRegister && !!passFeedback)}
-            style={{
-              marginTop: 10,
-              background: loading || (isRegister && !!passFeedback) ? "#30363D" : "linear-gradient(135deg, #00F0FF, #00A3FF)",
-              border: "none",
-              borderRadius: 14,
-              padding: "18px",
-              color: "#000",
-              fontFamily: "'Syne', sans-serif",
-              fontWeight: 800,
-              fontSize: 16,
-              cursor: (loading || (isRegister && !!passFeedback)) ? "not-allowed" : "pointer",
-              transition: "transform 0.2s"
-            }}
-          >
-            {loading ? "Verifying..." : isRegister ? "Create Account" : "Sign In"}
-          </button>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "10px 0" }}>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} />
-            <span style={{ fontSize: 12, color: "#94A3B8" }}>OR</span>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} />
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "center", borderRadius: 14, overflow: "hidden" }}>
-            <GoogleLogin
-              onSuccess={handleGoogleLogin}
-              onError={() => setError("Google Sign-In failed")}
-              theme="filled_black"
-              shape="pill"
-              size="large"
-              width="360"
-              text={isRegister ? "signup_with" : "signin_with"}
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={handleGuestEntry}
-            style={{ background: "transparent", border: "1px solid rgba(0,240,255,0.4)", borderRadius: 14, padding: "14px", color: "#00F0FF", cursor: "pointer", fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14 }}
-          >
-            ⚡ Explore as Guest
-          </button>
-        </form>
-
-        <div style={{ marginTop: 32, textAlign: "center" }}>
           <button
             disabled={loading}
-            onClick={() => setIsRegister(!isRegister)}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "#00F0FF",
-              fontSize: 14,
-              cursor: "pointer",
-              textDecoration: "underline",
-              padding: "12px 20px", // Increased hit area
-              transition: "opacity 0.2s"
-            }}
-            onMouseOver={e => e.target.style.opacity = 0.8}
-            onMouseOut={e => e.target.style.opacity = 1}
+            className="w-full bg-accent hover:brightness-110 active:scale-[0.98] py-5 rounded-2xl text-black font-syne font-black text-sm uppercase tracking-[0.2em] transition-all disabled:opacity-50"
           >
-            {isRegister ? "Already have an account? Sign In" : "Don't have an account? Join now"}
+            {loading ? "Decrypting..." : isRegister ? "Initialize Account" : "Access Console"}
           </button>
-        </div>
+
+          <div className="flex items-center gap-4 py-4">
+            <div className="flex-1 h-px bg-border/40" />
+            <span className="text-[10px] text-muted font-black uppercase tracking-widest">or Secure Entry</span>
+            <div className="flex-1 h-px bg-border/40" />
+          </div>
+
+          <div className="flex justify-center rounded-2xl overflow-hidden brightness-90 hover:brightness-100 transition-all">
+            <GoogleLogin onSuccess={handleGoogleLogin} theme="filled_black" shape="pill" size="large" width="360" />
+          </div>
+        </form>
+
+        <button
+          onClick={() => setIsRegister(!isRegister)}
+          className="w-full mt-8 text-[11px] text-accent/70 hover:text-accent font-black uppercase tracking-widest transition-colors cursor-pointer underline underline-offset-4"
+        >
+          {isRegister ? "Switch to Secure Access" : "Don't have permissions? Join Now"}
+        </button>
       </div>
     </div>
   );
@@ -201,27 +122,19 @@ function AuthScreen({ onLogin, C }) {
 
 // ─── ERROR BOUNDARY ────────────────────────────────────────────────────────
 class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
+  state = { hasError: false, error: null };
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: 40, background: "#0D1117", color: "#fff", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
-          <h1 style={{ fontSize: 48 }}>Oops! 🚧</h1>
-          <p style={{ color: "#94A3B8", fontSize: 18, maxWidth: 500 }}>
-            Something went wrong in the GradLaunch component. This is often due to a state mismatch or an unexpected API response.
-          </p>
-          <pre style={{ background: "rgba(255,0,0,0.1)", padding: 20, borderRadius: 12, fontSize: 13, color: "#FF3B30", border: "1px solid #FF3B3033" }}>
+        <div className="h-screen bg-background flex flex-col items-center justify-center p-10 text-center space-y-6">
+          <div className="text-8xl">🚧</div>
+          <h1 className="font-syne text-4xl font-black text-white">SYSTEM ANOMALY</h1>
+          <p className="text-muted max-w-md text-sm font-medium leading-relaxed">The GradLaunch core experienced an unexpected interruption. This could be due to a synchronization error.</p>
+          <div className="bg-pink/5 border border-pink/10 p-4 rounded-2xl text-pink text-[10px] font-mono max-w-lg overflow-auto">
             {this.state.error?.toString()}
-          </pre>
-          <button onClick={() => window.location.reload()} style={{ marginTop: 24, padding: "12px 24px", borderRadius: 12, background: "#00F0FF", color: "#000", border: "none", cursor: "pointer", fontWeight: 700 }}>
-            Reload Application
-          </button>
+          </div>
+          <button onClick={() => window.location.reload()} className="bg-accent px-8 py-4 rounded-2xl text-black font-syne font-black uppercase tracking-widest text-xs">Re-Initialize</button>
         </div>
       );
     }
@@ -231,9 +144,6 @@ class ErrorBoundary extends React.Component {
 
 // ─── MAIN APP ────────────────────────────────────────────────────────────────
 function GradLaunchContent() {
-  const [isDark, setIsDark] = useState(true);
-  const C = isDark ? COLORS : LIGHT_COLORS;
-
   const navigate = useNavigate();
   const location = useLocation();
   const currentTab = location.pathname.split("/")[1] || "dashboard";
@@ -253,16 +163,13 @@ function GradLaunchContent() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  // Restore session and data from backend
   useEffect(() => {
     async function restoreSession() {
       const storedToken = localStorage.getItem("token");
       if (storedToken) {
         try {
-          const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
-          const res = await fetch(`${apiBase}/api/auth/me`, {
-            headers: { "Authorization": `Bearer ${storedToken}` }
-          });
+          const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
+          const res = await fetch(`${apiBase}/api/auth/me`, { headers: { "Authorization": `Bearer ${storedToken}` } });
           if (res.ok) {
             const data = await res.json();
             setCurrentUser(data.user);
@@ -280,12 +187,8 @@ function GradLaunchContent() {
               if (pData.aiContext) setGlobalProfileContext(pData.aiContext);
               if (pData.skills) setProfileText(`${pData.skills} ${pData.targetRole} ${pData.baseResume} ${pData.aiContext || ""}`);
             }
-          } else {
-            localStorage.removeItem("token");
-          }
-        } catch (e) {
-          console.error("Session restore failed", e);
-        }
+          } else { localStorage.removeItem("token"); }
+        } catch (e) { console.error("Session restore failed", e); }
       }
       setAuthLoading(false);
     }
@@ -298,200 +201,142 @@ function GradLaunchContent() {
   }
 
   async function handleAddToTracker(job) {
-    const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+    const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
     const token = localStorage.getItem("token");
-
     const exists = applications.find(a => a.company === job.company && a.role === job.title);
+    
     if (!exists) {
       try {
         const stage = job.wishlist ? "Wishlist" : "Applied";
         const res = await fetch(`${apiBase}/api/applications`, {
           method: "POST",
           headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            company: job.company,
-            role: job.title,
-            logo: job.logo,
-            stage,
-            job_link: job.link,
-            match_score: job.match || 85,
-            is_trusted: job.is_trusted || 0
-          })
+          body: JSON.stringify({ company: job.company, role: job.title, logo: job.logo, stage, job_link: job.link, match_score: job.match || 85, is_trusted: job.is_trusted || 0 })
         });
         if (res.ok) {
           const syncRes = await fetch(`${apiBase}/api/applications`, { headers: { "Authorization": `Bearer ${token}` } });
-          if (syncRes.ok) {
-            setApplications(await syncRes.json());
-            showToast("\u2705 Added to tracker!");
-          }
+          if (syncRes.ok) setApplications(await syncRes.json());
+          showToast("Added to Job Pipeline!");
         }
-      } catch (e) {
-        console.error("Apply failed", e);
-        showToast("Failed to add to tracker", "error");
-      }
+      } catch (e) { showToast("Error syncing application", "error"); }
     }
 
-    if (job.wishlist) {
-      navigate("/tracker");
-    } else {
-      setPrefilledJob({ description: job.description, link: job.link, optimize: !!job.optimize });
-      navigate("/resume");
-    }
+    if (job.wishlist) navigate("/tracker");
+    else { setPrefilledJob({ description: job.description, link: job.link, optimize: !!job.optimize }); navigate("/resume"); }
   }
 
   async function handleToggleSave(job) {
-    const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+    const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
     const token = localStorage.getItem("token");
-    const isSaved = savedJobs.some(sj => sj.id === job.id);
-
+    const isAlreadySaved = savedJobs.some(sj => sj.id === job.id);
     try {
-      if (isSaved) {
-        await fetch(`${apiBase}/api/jobs/unsave`, {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ jobId: job.id })
-        });
+      if (isAlreadySaved) {
+        await fetch(`${apiBase}/api/jobs/unsave`, { method: "POST", headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ jobId: job.id }) });
         setSavedJobs(prev => prev.filter(sj => sj.id !== job.id));
-        showToast("\uD83D\uDCD1 Removed from saved");
+        showToast("Removed from Bookmarks");
       } else {
-        await fetch(`${apiBase}/api/jobs/save`, {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ job })
-        });
+        await fetch(`${apiBase}/api/jobs/save`, { method: "POST", headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ job }) });
         setSavedJobs(prev => [...prev, job]);
-        showToast("\uD83D\uDCD6 Saved to bookmarks!");
+        showToast("Saved to Bookmarks!");
       }
-    } catch (e) {
-      console.error("Save toggle failed", e);
-      showToast("Error saving job", "error");
-    }
+    } catch (e) { showToast("Database sync error", "error"); }
   }
 
-  if (authLoading) {
-    return (
-      <div style={{ height: "100vh", background: "#04060A", display: "flex", alignItems: "center", justifyContent: "center", color: "#00F0FF", fontFamily: "'Syne', sans-serif", fontSize: 18 }}>
-        ⚡ GradLaunch is powering up...
-      </div>
-    );
-  }
-
-  if (!currentUser) {
-    return <AuthScreen C={C} onLogin={(user, token) => {
-      localStorage.setItem("token", token);
-      setCurrentUser(user);
-    }} />;
-  }
+  if (authLoading) return <div className="h-screen bg-background flex items-center justify-center font-syne text-accent animate-pulse uppercase tracking-[0.4em] font-black">Initializing Orion AI...</div>;
+  if (!currentUser) return <AuthScreen onLogin={(user, token) => { localStorage.setItem("token", token); setCurrentUser(user); }} />;
 
   const TABS = [
     { id: "dashboard", label: "Dashboard", icon: "📊", path: "/" },
-    { id: "jobs", label: "Job Search", icon: "🔍", path: "/jobs" },
-    { id: "copilot", label: "AI Copilot", icon: "🤖", path: "/copilot" },
-    { id: "resume", label: "Resume AI", icon: "✨", path: "/resume" },
-    { id: "tracker", label: "Kanban Board", icon: "📋", path: "/tracker" },
-    { id: "profile", label: "Profile", icon: "👤", path: "/profile" },
+    { id: "jobs", label: "Discovery", icon: "🔍", path: "/jobs" },
+    { id: "copilot", label: "Copilot", icon: "🤖", path: "/copilot" },
+    { id: "resume", label: "Optimizer", icon: "🪄", path: "/resume" },
+    { id: "tracker", label: "Pipeline", icon: "📋", path: "/tracker" },
+    { id: "profile", label: "Identity", icon: "👤", path: "/profile" },
   ];
 
   return (
-    <>
-      <style>{FONTS}</style>
-      <style>{`
-        * { box-sizing: border-box; }
-        body { margin: 0; background: ${C.bg}; color: ${C.text}; transition: background 0.3s; }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 3px; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes slideRight { from { transform: translateX(-20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        
-        .sidebar-item { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); animation: slideRight 0.4s ease-out forwards; opacity: 0; }
-        .sidebar-item:nth-child(1) { animation-delay: 0.1s; }
-        .sidebar-item:nth-child(2) { animation-delay: 0.15s; }
-        .sidebar-item:nth-child(3) { animation-delay: 0.2s; }
-        .sidebar-item:nth-child(4) { animation-delay: 0.25s; }
-        .sidebar-item:nth-child(5) { animation-delay: 0.3s; }
-        
-        .sidebar-item:hover { background: ${C.accent}15; color: ${C.accent}; transform: translateX(4px); }
-        .sidebar-active { background: ${C.accent}20; border-right: 3px solid ${C.accent}; color: ${C.accent}; opacity: 1 !important; }
-      `}</style>
-      <div style={{ display: "flex", minHeight: "100vh", background: C.bg, position: "relative", overflow: "hidden" }}>
-        {/* Atmosphere Glows */}
-        <div style={{ position: "absolute", top: "-10%", left: "20%", width: "40%", height: "40%", background: `radial-gradient(circle, ${C.accent}08 0%, transparent 70%)`, filter: "blur(100px)", pointerEvents: "none" }} />
-        <div style={{ position: "absolute", bottom: "10%", right: "10%", width: "30%", height: "30%", background: `radial-gradient(circle, ${C.purple}08 0%, transparent 70%)`, filter: "blur(100px)", pointerEvents: "none" }} />
+    <div className="flex h-screen bg-background text-white font-inter overflow-hidden relative">
+      {/* Background Glows */}
+      <div className="absolute top-0 left-1/4 w-[60%] h-[60%] bg-accent/5 blur-[150px] pointer-events-none" />
+      <div className="absolute bottom-0 right-1/4 w-[40%] h-[40%] bg-purple/5 blur-[150px] pointer-events-none" />
 
-        <aside style={{ width: sidebarOpen ? 260 : 0, background: C.sidebar, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", overflow: "hidden", transition: "width 0.3s", position: "relative", zIndex: 100 }}>
-          <div style={{ padding: "24px", display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 12, background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, boxShadow: SHADOWS.accent }}>🚀</div>
-            <span style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 24, letterSpacing: "-0.5px" }}>GradLaunch</span>
-          </div>
-          <nav style={{ flex: 1, padding: "0 12px", display: "flex", flexDirection: "column", gap: 4 }}>
-            {TABS.map(t => (
-              <button key={t.id} onClick={() => navigate(t.path)} className={`sidebar-item ${currentTab === t.id || (t.id === "dashboard" && currentTab === "dashboard") ? "sidebar-active" : ""}`} style={{ background: "transparent", border: "none", borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", color: (currentTab === t.id || (t.id === "dashboard" && currentTab === "dashboard")) ? C.accent : C.muted, fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, textAlign: "left" }}>
-                <span style={{ fontSize: 18 }}>{t.icon}</span>
-                {t.label}
-              </button>
-            ))}
-          </nav>
-          <div style={{ padding: 20, borderTop: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 36, height: 36, borderRadius: "50%", background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`, display: "flex", alignItems: "center", justifyContent: "center", color: "#000", fontWeight: 800, fontSize: 14 }}>
-                {currentUser?.name?.[0]?.toUpperCase() || "U"}
-              </div>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 700 }}>{currentUser?.name || "User"}</div>
-                <div style={{ fontSize: 11, color: C.muted }}>{currentUser?.email || ""}</div>
-              </div>
-            </div>
-            <button onClick={handleLogout} style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px", color: C.muted, fontSize: 12, cursor: "pointer", width: "100%" }}>Logout</button>
-          </div>
-        </aside>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <header style={{ height: 60, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 24px", background: C.surface, justifyContent: "space-between" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{ background: "transparent", border: "none", color: C.text, fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center" }}>
-                {sidebarOpen ? "⬅\uFE0F" : "\u27A1\uFE0F"}
-              </button>
-              <button
-                onClick={() => setIsDark(!isDark)}
-                style={{
-                  background: C.card,
-                  border: `1px solid ${C.border}`,
-                  borderRadius: 12,
-                  padding: "6px 12px",
-                  color: C.text,
-                  fontSize: 12,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  fontWeight: 600,
-                  transition: "all 0.2s"
-                }}
-              >
-                {isDark ? "☀️ Light" : "🌙 Dark"}
-              </button>
-            </div>
-            <div style={{ border: `1px solid ${C.border}`, borderRadius: 20, padding: "4px 12px", fontSize: 12, background: C.card, color: C.accent, fontWeight: 800 }}>8M+ Global Jobs</div>
-          </header>
-          <main style={{ flex: 1, padding: 24, overflowY: "auto" }}>
-            <div style={{ maxWidth: 1200, margin: "0 auto", animation: "fadeIn 0.3s ease-out" }}>
-              <Routes>
-                <Route path="/" element={<Dashboard C={C} savedJobs={savedJobs} profileText={profileText} />} />
-                <Route path="/jobs" element={<JobSearch onAddToTracker={handleAddToTracker} onToggleSave={handleToggleSave} savedJobs={savedJobs} profileText={profileText} C={C} />} />
-                <Route path="/job/:id" element={<JobView C={C} onAddToTracker={handleAddToTracker} savedJobs={savedJobs} />} />
-                <Route path="/copilot" element={<Copilot C={C} />} />
-                <Route path="/resume" element={<ResumeTailor initialJobDesc={prefilledJob.description} jobUrl={prefilledJob.link} globalContext={globalProfileContext} C={C} />} />
-                <Route path="/tracker" element={<AppTracker applications={applications} setApplications={setApplications} C={C} />} />
-                <Route path="/profile" element={<Profile C={C} globalContext={globalProfileContext} setGlobalContext={setGlobalProfileContext} setGlobalVector={setProfileText} currentUser={currentUser} onProfileUpdate={(p) => { if (p.name) setCurrentUser(prev => ({ ...prev, name: p.name })); showToast("\u2705 Profile updated!"); }} />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </div>
-          </main>
+      {/* Sidebar Navigation */}
+      <aside 
+        className={`bg-surface border-r border-border transition-all duration-300 ease-in-out flex flex-col z-50 overflow-hidden ${sidebarOpen ? 'w-72' : 'w-0'}`}
+      >
+        <div className="p-8 flex items-center gap-4">
+          <div className="h-12 w-12 bg-accent rounded-2xl flex items-center justify-center text-black text-2xl animate-bounce-slow">🚀</div>
+          <span className="font-syne font-black text-2xl uppercase tracking-tighter whitespace-nowrap">GradLaunch</span>
         </div>
-        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} C={C} />}
+
+        <nav className="flex-1 px-4 space-y-1">
+          {TABS.map(t => (
+            <button 
+              key={t.id} 
+              onClick={() => navigate(t.path)} 
+              className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-syne font-black uppercase tracking-widest text-[10px] transition-all group ${currentTab === t.id ? 'bg-accent text-black shadow-[0_0_20px_rgba(200,255,0,0.2)]' : 'text-muted hover:text-white hover:bg-white/5'}`}
+            >
+              <span className={`text-lg transition-transform group-hover:scale-125 ${currentTab === t.id ? 'grayscale-0' : 'grayscale opacity-70'}`}>{t.icon}</span>
+              <span className="whitespace-nowrap">{t.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        {/* User Profile Mini */}
+        <div className="p-6 border-t border-border bg-card/20 mb-4 mx-4 rounded-3xl">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-accent to-purple flex items-center justify-center font-black text-black">
+              {currentUser.name?.[0].toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold truncate leading-none mb-1 uppercase tracking-tight">{currentUser.name}</p>
+              <p className="text-[10px] text-muted truncate italic">PRO STATUS ACTIVE</p>
+            </div>
+          </div>
+          <button 
+            onClick={handleLogout}
+            className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+          >
+            Sign Out
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Container */}
+      <div className="flex-1 flex flex-col min-w-0 relative">
+        <header className="h-20 border-b border-border bg-surface/80 backdrop-blur-xl flex items-center justify-between px-8 sticky top-0 z-40">
+          <div className="flex items-center gap-6">
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl transition-all">
+              {sidebarOpen ? '⇠' : '⇢'}
+            </button>
+            <div className="h-4 w-px bg-border mx-2" />
+            <span className="text-xs font-black uppercase tracking-widest text-muted">{currentTab.replace('-', ' ')}</span>
+          </div>
+          
+          <div className="flex items-center gap-6">
+            <div className="hidden md:flex items-center gap-2 bg-accent/10 border border-accent/20 rounded-full px-4 py-1.5">
+              <span className="text-[10px] font-black text-accent uppercase tracking-tighter">8.4M Jobs Analyzed Today</span>
+            </div>
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-y-auto custom-scrollbar p-8">
+          <div className="max-w-7xl mx-auto h-full animate-fade-in">
+            <Routes>
+              <Route path="/" element={<Dashboard savedJobs={savedJobs} profileText={profileText} />} />
+              <Route path="/jobs" element={<JobSearch onAddToTracker={handleAddToTracker} onToggleSave={handleToggleSave} savedJobs={savedJobs} profileText={profileText} />} />
+              <Route path="/copilot" element={<Copilot />} />
+              <Route path="/resume" element={<ResumeTailor initialJobDesc={prefilledJob.description} jobUrl={prefilledJob.link} globalContext={globalProfileContext} />} />
+              <Route path="/tracker" element={<AppTracker applications={applications} setApplications={setApplications} />} />
+              <Route path="/profile" element={<Profile globalContext={globalProfileContext} setGlobalContext={setGlobalProfileContext} setGlobalVector={setProfileText} currentUser={currentUser} onProfileUpdate={(p) => { if (p.name) setCurrentUser(prev => ({ ...prev, name: p.name })); showToast("Profile Authenticated!"); }} />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </div>
+        </main>
       </div>
-    </>
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+    </div>
   );
 }
 

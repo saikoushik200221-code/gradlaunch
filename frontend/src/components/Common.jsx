@@ -1,199 +1,118 @@
 import React from 'react';
-import { LOGO_COLORS } from '../theme';
 
-export function TagBadge({ label, C }) {
+export function TagBadge({ label }) {
     const colors = {
-        "New Grad": { bg: C.bg === "#04060A" ? "#0D2A1F" : "#DCFCE7", color: C.bg === "#04060A" ? "#00E599" : "#166534", border: C.bg === "#04060A" ? "#00E59933" : "#86EFAC" },
-        "H1B Sponsor": { bg: C.bg === "#04060A" ? "#1A1A2E" : "#F5F3FF", color: C.bg === "#04060A" ? "#A78BFA" : "#5B21B6", border: C.bg === "#04060A" ? "#A78BFA33" : "#C4B5FD" },
-        "OPT Friendly": { bg: C.bg === "#04060A" ? "#1A2A0D" : "#F0FDF4", color: C.bg === "#04060A" ? "#7CDB8E" : "#166534", border: C.bg === "#04060A" ? "#7CDB8E33" : "#BBF7D0" },
-        "International Friendly": { bg: C.bg === "#04060A" ? "#1A2030" : "#F0F9FF", color: C.bg === "#04060A" ? "#00D4FF" : "#075985", border: C.bg === "#04060A" ? "#00D4FF33" : "#BAE6FD" },
-        "Remote Friendly": { bg: C.bg === "#04060A" ? "#0D1A2A" : "#F0F9FF", color: C.bg === "#04060A" ? "#60B8E0" : "#075985", border: C.bg === "#04060A" ? "#60B8E033" : "#BAE6FD" },
-        "Fresher Friendly": { bg: C.bg === "#04060A" ? "#2A1A0D" : "#FFFBEB", color: C.bg === "#04060A" ? "#FFD700" : "#92400E", border: C.bg === "#04060A" ? "#FFD70033" : "#FDE68A" },
-        "Remote": { bg: C.bg === "#04060A" ? "#0D1A2A" : "#F0F9FF", color: C.bg === "#04060A" ? "#60B8E0" : "#075985", border: C.bg === "#04060A" ? "#60B8E033" : "#BAE6FD" },
-        "Security Clearance OK": { bg: C.bg === "#04060A" ? "#1A0D0D" : "#FFF1F2", color: C.bg === "#04060A" ? "#FF9966" : "#9F1239", border: C.bg === "#04060A" ? "#FF996633" : "#FECDD3" },
+        "New Grad": "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+        "H1B Sponsor": "bg-purple-500/10 text-purple-400 border-purple-500/20",
+        "OPT Friendly": "bg-green-500/10 text-green-400 border-green-500/20",
+        "Remote Friendly": "bg-blue-500/10 text-blue-400 border-blue-500/20",
+        "Fresher Friendly": "bg-amber-500/10 text-amber-400 border-amber-500/20",
+        "Remote": "bg-sky-500/10 text-sky-400 border-sky-500/20",
     };
-    const c = colors[label] || { bg: C.tag, color: C.accent, border: C.accentGlow };
+    const colorClass = colors[label] || "bg-zinc-500/10 text-zinc-400 border-zinc-500/20";
+    
     return (
-        <span className="premium-tag" style={{
-            background: c.bg,
-            color: c.color,
-            border: `1px solid ${c.border}`,
-            padding: "4px 10px",
-            borderRadius: "8px",
-            fontSize: "11px",
-            fontWeight: "600",
-            fontFamily: "'DM Sans', sans-serif",
-            letterSpacing: "0.2px",
-            backdropFilter: "blur(4px)",
-            boxShadow: `0 2px 4px rgba(0,0,0,0.1)`,
-            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-            cursor: "default",
-            display: "inline-flex",
-            alignItems: "center"
-        }}>
+        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all hover:brightness-125 cursor-default ${colorClass}`}>
             {label}
-            <style>{`
-                .premium-tag:hover { transform: translateY(-1px); filter: brightness(1.1); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
-            `}</style>
         </span>
     );
 }
 
-export function LogoCircle({ letter, logoUrl, size = 40 }) {
-    const bg = LOGO_COLORS[letter] || "#334155";
+export function LogoCircle({ letter, logoUrl, size = 48 }) {
     return (
-        <div className="logo-pulse" style={{
-            width: size,
-            height: size,
-            borderRadius: size * 0.25,
-            background: logoUrl ? "#fff" : bg,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontFamily: "'Syne', sans-serif",
-            fontWeight: 800,
-            fontSize: size * 0.38,
-            color: "#fff",
-            flexShrink: 0,
-            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-            cursor: "pointer",
-            overflow: "hidden",
-            border: logoUrl ? "1px solid rgba(0,0,0,0.05)" : "none"
-        }}>
-            {logoUrl ? <img src={logoUrl} alt={letter} style={{ width: "100%", height: "100%", objectFit: "contain", padding: "4px" }} /> : letter}
-            <style>{`
-                .logo-pulse:hover { transform: scale(1.05) rotate(-3deg); filter: brightness(1.2); box-shadow: 0 8px 16px rgba(0,0,0,0.2); }
-            `}</style>
+        <div 
+            className="rounded-2xl bg-zinc-800 flex items-center justify-center font-syne font-black text-white overflow-hidden border border-border/50 transition-all hover:scale-110 hover:-rotate-3 flex-shrink-0"
+            style={{ width: size, height: size, fontSize: size * 0.4 }}
+        >
+            {logoUrl ? (
+                <img src={logoUrl} alt={letter} className="w-full h-full object-contain p-2 bg-white" />
+            ) : (
+                letter
+            )}
         </div>
     );
 }
 
-export function MatchRing({ score, C }) {
-    const color = score >= 90 ? C.green : score >= 75 ? C.accent : C.yellow;
+export function MatchRing({ score }) {
+    const color = score >= 85 ? 'text-accent' : score >= 70 ? 'text-purple' : 'text-zinc-500';
     return (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-            <div style={{ width: 48, height: 48, borderRadius: "50%", background: `conic-gradient(${color} ${score * 3.6}deg, ${C.border} 0deg)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-                <div style={{ width: 36, height: 36, borderRadius: "50%", background: C.card, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color, fontFamily: "'Syne', sans-serif" }}>
-                    {score}%
-                </div>
+        <div className="flex flex-col items-center gap-1">
+            <div className="relative h-12 w-12 flex items-center justify-center">
+                <svg className="h-full w-full -rotate-90">
+                    <circle cx="24" cy="24" r="20" fill="transparent" stroke="currentColor" strokeWidth="4" className="text-white/5" />
+                    <circle 
+                        cx="24" 
+                        cy="24" 
+                        r="20" 
+                        fill="transparent" 
+                        stroke="currentColor" 
+                        strokeWidth="4" 
+                        strokeDasharray={`${2 * Math.PI * 20}`} 
+                        strokeDashoffset={`${2 * Math.PI * 20 * (1 - (score || 0) / 100)}`} 
+                        className={`${color} stroke-linecap-round transition-all duration-1000`} 
+                    />
+                </svg>
+                <span className={`absolute text-[10px] font-black ${color}`}>{score}%</span>
             </div>
-            <span style={{ fontSize: 10, color: C.muted, fontFamily: "'DM Sans', sans-serif" }}>Match</span>
+            <span className="text-[9px] font-black uppercase tracking-tighter text-muted">Match</span>
         </div>
     );
 }
 
-export function SkeletonCard({ C }) {
+export function SkeletonCard() {
     return (
-        <div style={{
-            background: C.card,
-            padding: "16px",
-            borderRadius: "16px",
-            border: `1px solid ${C.border}`,
-            display: "flex",
-            gap: "12px",
-            animation: "pulse 1.5s infinite ease-in-out"
-        }}>
-            <div style={{ width: 42, height: 42, background: C.surface, borderRadius: "10px" }} />
-            <div style={{ flex: 1 }}>
-                <div style={{ height: "18px", background: C.surface, borderRadius: "4px", width: "70%", marginBottom: "8px" }} />
-                <div style={{ height: "14px", background: C.surface, borderRadius: "4px", width: "40%", marginBottom: "12px" }} />
-                <div style={{ display: "flex", gap: "6px" }}>
-                    <div style={{ height: "20px", background: C.surface, borderRadius: "6px", width: "60px" }} />
-                    <div style={{ height: "20px", background: C.surface, borderRadius: "6px", width: "60px" }} />
-                </div>
+        <div className="bg-card/40 border border-border/50 rounded-3xl p-6 animate-pulse space-y-4">
+            <div className="flex items-start justify-between">
+                <div className="w-14 h-14 bg-zinc-800 rounded-2xl" />
+                <div className="w-20 h-8 bg-zinc-800 rounded-xl" />
             </div>
-            <style>{`
-                @keyframes pulse {
-                    0% { opacity: 0.6; }
-                    50% { opacity: 0.3; }
-                    100% { opacity: 0.6; }
-                }
-            `}</style>
+            <div className="space-y-2">
+                <div className="h-5 bg-zinc-800 rounded-lg w-3/4" />
+                <div className="h-4 bg-zinc-800 rounded-lg w-1/2" />
+            </div>
+            <div className="flex gap-2">
+                <div className="h-6 bg-zinc-800 rounded-lg w-16" />
+                <div className="h-6 bg-zinc-800 rounded-lg w-20" />
+            </div>
         </div>
     );
 }
 
-export function EmptyState({ icon, title, description, C }) {
+export function EmptyState({ icon, title, description }) {
     return (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px", textAlign: "center" }}>
-            <div style={{ fontSize: "56px", marginBottom: "20px" }}>{icon}</div>
-            <h3 style={{ fontFamily: "'Syne', sans-serif", fontSize: "20px", fontWeight: "700", margin: "0 0 12px 0", color: C.text }}>{title}</h3>
-            <p style={{ color: C.muted, maxWidth: "300px", fontSize: "14px", lineHeight: "1.6" }}>{description}</p>
+        <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-4">
+            <div className="text-6xl animate-bounce-slow">{icon}</div>
+            <h3 className="font-syne text-2xl font-black uppercase tracking-tight text-white">{title}</h3>
+            <p className="text-muted max-w-xs text-sm font-medium leading-relaxed">{description}</p>
         </div>
     );
 }
 
-export function TrustBadge({ C }) {
+export function TrustBadge() {
     return (
-        <div style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "4px",
-            background: "linear-gradient(135deg, #00F0FF20, #00A3FF20)",
-            border: `1px solid #00F0FF44`,
-            borderRadius: "8px",
-            padding: "4px 10px",
-            color: "#00F0FF",
-            fontSize: "11px",
-            fontWeight: "800",
-            fontFamily: "'Syne', sans-serif",
-            textTransform: "uppercase",
-            letterSpacing: "0.5px",
-            boxShadow: "0 0 15px #00F0FF22"
-        }}>
-            <span style={{ fontSize: "14px" }}>\u2705</span> Direct Apply
+        <div className="inline-flex items-center gap-1.5 bg-accent/10 border border-accent/20 rounded-xl px-3 py-1.5 text-accent text-[10px] font-black uppercase tracking-wider shadow-[0_0_15px_rgba(200,255,0,0.1)]">
+            <span className="text-xs">✅</span>
+            <span>Direct Apply</span>
         </div>
     );
 }
 
-export function RecentlyPostedBadge({ C, hours = 48 }) {
+export function RecentlyPostedBadge() {
     return (
-        <div style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "4px",
-            background: "rgba(16, 185, 129, 0.1)",
-            border: "1px solid rgba(16, 185, 129, 0.3)",
-            borderRadius: "8px",
-            padding: "4px 10px",
-            color: "#10B981",
-            fontSize: "11px",
-            fontWeight: "700",
-            fontFamily: "'DM Sans', sans-serif"
-        }}>
-            <span style={{ fontSize: "12px" }}>\uD83D\uDD25</span> Fresh Post
+        <div className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-1.5 text-emerald-400 text-[10px] font-black uppercase tracking-wider">
+            <span className="text-xs">🔥</span>
+            <span>Hot Post</span>
         </div>
     );
 }
 
-export function Toast({ message, type = "success", onClose, C }) {
-    const color = type === "success" ? C.green : C.red;
+export function Toast({ message, type = "success", onClose }) {
+    const color = type === "success" ? "border-accent text-accent" : "border-pink text-pink";
     return (
-        <div style={{
-            position: "fixed",
-            bottom: "32px",
-            right: "32px",
-            background: C.surface,
-            border: `1px solid ${color}44`,
-            borderLeft: `4px solid ${color}`,
-            borderRadius: "12px",
-            padding: "16px 24px",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-            zIndex: 10000,
-            animation: "slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
-        }}>
-            <span style={{ fontSize: "18px" }}>{type === "success" ? "✓" : "✕"}</span>
-            <div style={{ color: C.text, fontSize: "14px", fontWeight: "600" }}>{message}</div>
-            <button onClick={onClose} style={{ background: "transparent", border: "none", color: C.muted, cursor: "pointer", marginLeft: "12px", fontSize: "18px" }}>×</button>
-            <style>{`
-                @keyframes slideUp {
-                    from { transform: translateY(20px); opacity: 0; }
-                    to { transform: translateY(0); opacity: 1; }
-                }
-            `}</style>
+        <div className={`fixed bottom-8 right-8 bg-card border-l-4 p-6 rounded-2xl shadow-2xl z-[100] animate-slide-up flex items-center gap-4 ${color}`}>
+            <span className="text-xl">{type === "success" ? "✓" : "✕"}</span>
+            <div className="text-sm font-bold tracking-tight text-white">{message}</div>
+            <button onClick={onClose} className="ml-4 text-muted hover:text-white transition-colors text-xl">×</button>
         </div>
     );
 }

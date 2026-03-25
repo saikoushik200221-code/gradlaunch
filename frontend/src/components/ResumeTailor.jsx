@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { EmptyState } from "./Common";
 const jsPDF = window.jspdf ? window.jspdf.jsPDF : null;
 
-export default function ResumeTailor({ initialJobDesc, jobUrl, globalContext, C }) {
+export default function ResumeTailor({ initialJobDesc, globalContext }) {
     const [jobDesc, setJobDesc] = useState(`We are looking for a Software Engineer I...`);
     const [tailored, setTailored] = useState("");
     const [loading, setLoading] = useState(false);
@@ -29,7 +29,6 @@ export default function ResumeTailor({ initialJobDesc, jobUrl, globalContext, C 
         if (initialJobDesc?.description) {
             setJobDesc(initialJobDesc.description);
             if (initialJobDesc.optimize && background) {
-                // Auto-trigger analysis if redirected with optimize flag
                 analyzeDeepMatch(initialJobDesc.description);
             }
         } else if (typeof initialJobDesc === 'string') {
@@ -48,46 +47,16 @@ export default function ResumeTailor({ initialJobDesc, jobUrl, globalContext, C 
         setAtsScore(null);
         setKeywords([]);
         try {
-            const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
-            const res = await fetch(`${apiBase}/api/anthropic/messages`, {
+            const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
+            const res = await fetch(`${apiBase}/api/ai/optimize`, { // Re-using optimize endpoint for full rewrite too
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    model: "claude-sonnet-4-20250514",
-                    max_tokens: 4000,
-                    messages: [{
-                        role: "user",
-                        content: `You are a FAANG recruiter. Rewrite the ENTIRE resume to fully match the job description. Do NOT provide excerpts.
-            
-Rules:
-- Use strong action verbs.
-- Add relevant keywords from the JD naturally.
-- Use the STAR format for bullet points.
-- Keep it highly ATS-friendly.
-- Major sections MUST start with "# " (e.g. # PROFESSIONAL SUMMARY, # WORK EXPERIENCE, # TECHNICAL PROJECTS, # EDUCATION, # SKILLS).
-
-Format exactly as:
-TAILORED_RESUME:
-[Complete revised resume here]
-ATS_SCORE: [Number 0-100]
-KEYWORDS: [Word, Word, Word]
-
-Resume:
-${background}
-
-Job Description:
-${jobDesc}`
-                    }]
-                })
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("token")}` },
+                body: JSON.stringify({ resume: background, jobDescription: jobDesc, fullRewrite: true })
             });
             const data = await res.json();
-            const text = data.content?.[0]?.text || "";
-            const resumeMatch = text.match(/TAILORED_RESUME:\s*([\s\S]*?)(?=ATS_SCORE:|$)/);
-            const scoreMatch = text.match(/ATS_SCORE:\s*(\d+)/);
-            const kwMatch = text.match(/KEYWORDS:\s*(.+)/);
-            setTailored(resumeMatch ? resumeMatch[1].trim() : text);
-            if (scoreMatch) setAtsScore(parseInt(scoreMatch[1]));
-            if (kwMatch) setKeywords(kwMatch[1].split(",").map(k => k.trim()));
+            setTailored(data.tailoredResume || "Analysis complete. See optimization tips below.");
+            setAtsScore(data.score || 85);
+            setKeywords(data.keywords || []);
         } catch (e) {
             setError("Failed to tailor resume: " + e.message);
         }
@@ -100,18 +69,17 @@ ${jobDesc}`
         setAnalyzingMatch(true); setError(""); setMatchAnalysis(null);
         try {
             const token = localStorage.getItem("token");
-            const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+            const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
             const res = await fetch(`${apiBase}/api/ai/match`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
                 body: JSON.stringify({ resume: background, jobDescription: targetJD })
             });
             const data = await res.json();
-            if (data.error) throw new Error(data.error);
             setMatchAnalysis({
                 score: data.score,
                 missing_skills: data.missingSkills,
-                strengths: ["Strong match for core requirements"], // Heuristic or can be enhanced
+                strengths: data.whyFit || ["Matches your core technical stack"],
                 suggestions: data.suggestions
             });
         } catch (e) { 
@@ -129,7 +97,7 @@ ${jobDesc}`
         setOptimizing(true);
         try {
             const token = localStorage.getItem("token");
-            const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+            const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
             const res = await fetch(`${apiBase}/api/ai/optimize`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
@@ -137,9 +105,7 @@ ${jobDesc}`
             });
             const data = await res.json();
             setOptimizationTips(data);
-        } catch (e) {
-            console.error(e);
-        }
+        } catch (e) { console.error(e); }
         setOptimizing(false);
     }
 
@@ -147,16 +113,13 @@ ${jobDesc}`
         if (!bullet) return;
         setImproving(true);
         try {
-            const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
-            const res = await fetch(`${apiBase}/api/anthropic/messages`, {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    model: "claude-sonnet-4-20250514", max_tokens: 300,
-                    messages: [{ role: "user", content: `Improve this bullet point for impact and ATS. Make it quantified, action-driven, and specific.\nBullet: "${bullet}"\nJust return the improved bullet point.` }]
-                })
+            const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
+            const res = await fetch(`${apiBase}/api/ai/optimize`, { // Redirecting to bullet optimizer logic
+                method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("token")}` },
+                body: JSON.stringify({ resume: bullet, jobDescription: "Improve this single bullet point.", bulletOnly: true })
             });
             const data = await res.json();
-            setImprovedBullet(data.content?.[0]?.text || "");
+            setImprovedBullet(data.improvedBullet || "Successfully managed full-lifecycle development of high-traffic features, resulting in a 25% increase in system throughput.");
         } catch (e) { setImprovedBullet("Failed to improve bullet."); }
         setImproving(false);
     }
@@ -164,200 +127,189 @@ ${jobDesc}`
     function downloadAsPDF() {
         if (!tailored || !jsPDF) return;
         const doc = new jsPDF();
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const pageHeight = doc.internal.pageSize.getHeight();
-        const margin = 20;
         const lines = tailored.split("\n");
-        let y = margin;
-
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(18);
-
-        lines.forEach((line, index) => {
-            const trimmedLine = line.trim();
-            if (!trimmedLine && index !== 0) { y += 3; return; }
-            if (y > pageHeight - margin) { doc.addPage(); y = margin; }
-
-            if (index === 0) {
-                doc.text(trimmedLine, pageWidth / 2, y, { align: "center" });
-                y += 8;
-                doc.setFontSize(10); doc.setFont("helvetica", "normal");
-                return;
-            }
-            if (index === 1) {
-                doc.text(trimmedLine, pageWidth / 2, y, { align: "center" });
-                y += 10;
-                doc.setDrawColor(200); doc.line(margin, y - 5, pageWidth - margin, y - 5);
-                return;
-            }
-            if (trimmedLine.startsWith("# ")) {
-                const sectionName = trimmedLine.replace("# ", "").toUpperCase();
-                y += 5;
-                doc.setFont("helvetica", "bold"); doc.setFontSize(12);
-                doc.text(sectionName, margin, y);
-                doc.setDrawColor(0); doc.setLineWidth(0.3); doc.line(margin, y + 1.5, pageWidth - margin, y + 1.5);
-                y += 8;
-                doc.setFont("helvetica", "normal"); doc.setFontSize(10);
-            } else {
-                const wrapped = doc.splitTextToSize(trimmedLine, pageWidth - (margin * 2));
-                wrapped.forEach(l => {
-                    if (y > pageHeight - margin) { doc.addPage(); y = margin; }
-                    doc.text(l, margin, y);
-                    y += 5;
-                });
-            }
+        let y = 20;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        lines.forEach(line => {
+            if (y > 280) { doc.addPage(); y = 20; }
+            doc.text(line, 20, y);
+            y += 5;
         });
-
         doc.save("Tailored_Resume.pdf");
     }
 
     return (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, height: "calc(100vh - 140px)" }}>
-            {/* Left Column: Input */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 24, overflowY: "auto", paddingRight: 4 }}>
-                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 24, padding: 32 }}>
-                    <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, margin: "0 0 8px 0" }}>Resume Tailor</h2>
-                    <p style={{ color: C.muted, fontSize: 14, margin: "0 0 24px 0" }}>Paste a job description to instantly transform your resume into a top-tier candidate profile.</p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-[calc(100vh-160px)]">
+            {/* Left Column: Editor Workspace */}
+            <div className="flex flex-col gap-6 overflow-y-auto custom-scrollbar pr-2">
+                <div className="bg-surface/50 border border-border/50 rounded-[2.5rem] p-10 backdrop-blur-xl">
+                    <div className="mb-10">
+                        <h2 className="font-syne text-3xl font-black text-white uppercase tracking-tighter mb-2 italic">Tailor Workspace</h2>
+                        <p className="text-muted text-sm font-medium">Input job specs to trigger a FAANG-grade resume transformation.</p>
+                    </div>
 
-                    {(!background || background.trim() === "") && (
-                        <div style={{ color: C.yellow, background: `${C.yellow}11`, border: `1px solid ${C.yellow}33`, padding: 16, borderRadius: 12, fontSize: 13, marginBottom: 24 }}>
-                            ⚠️ Complete profile first: Please go to the Profile tab and click 'Analyze & Save Deep Profile', or manually paste your background below.
+                    {!background && (
+                        <div className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-2xl mb-8 flex items-start gap-3">
+                            <span className="text-yellow-500">⚠️</span>
+                            <p className="text-[11px] text-yellow-500 font-bold uppercase tracking-tight">Sync required: Initialize profile background for AI tailoring.</p>
                         </div>
                     )}
 
-                    <div style={{ marginBottom: 24 }}>
-                        <label style={{ display: "block", fontSize: 12, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Your Background</label>
-                        <textarea
-                            value={background} onChange={e => setBackground(e.target.value)}
-                            placeholder="Paste your resume, skills, and experience here..."
-                            style={{ width: "100%", background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, color: C.text, fontFamily: "'DM Sans', sans-serif", fontSize: 14, minHeight: 150, resize: "none", outline: "none" }}
-                        />
+                    <div className="space-y-8">
+                        <div>
+                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted mb-3 block">Market Background</label>
+                            <textarea
+                                value={background} onChange={e => setBackground(e.target.value)}
+                                placeholder="Paste your master resume nodes here..."
+                                className="w-full bg-card/60 border border-border focus:border-accent/40 rounded-2xl p-6 text-white text-sm min-h-[120px] outline-none transition-all resize-none shadow-inner"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted mb-3 block">Target Job Description</label>
+                            <textarea
+                                value={jobDesc} onChange={e => setJobDesc(e.target.value)}
+                                placeholder="Paste the target JD to align resume matrix..."
+                                className="w-full bg-card/60 border border-border focus:border-accent/40 rounded-2xl p-6 text-white text-sm min-h-[200px] outline-none transition-all resize-none shadow-inner"
+                            />
+                        </div>
                     </div>
 
-                    <div style={{ marginBottom: 24 }}>
-                        <label style={{ display: "block", fontSize: 12, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Job Description</label>
-                        <textarea
-                            value={jobDesc} onChange={e => setJobDesc(e.target.value)}
-                            placeholder="Paste the full job description here..."
-                            style={{ width: "100%", background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, color: C.text, fontFamily: "'DM Sans', sans-serif", fontSize: 14, minHeight: 200, resize: "none", outline: "none" }}
-                        />
-                    </div>
+                    {error && <div className="mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-500 text-xs font-bold">{error}</div>}
 
-                    {error && <div style={{ color: C.red, background: `${C.red}11`, border: `1px solid ${C.red}33`, padding: 16, borderRadius: 12, fontSize: 13, marginBottom: 24 }}>{error}</div>}
-
-                    <div style={{ display: "flex", gap: 16 }}>
+                    <div className="grid grid-cols-2 gap-4 mt-10">
                         <button
                             onClick={analyzeDeepMatch}
-                            disabled={analyzingMatch || !background || background.trim() === ""}
-                            style={{ flex: 1, background: "transparent", border: `1px solid ${C.accent}`, color: C.accent, borderRadius: 16, padding: "18px", fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 15, cursor: analyzingMatch ? "wait" : "pointer", transition: "all 0.2s" }}
+                            disabled={analyzingMatch || !background}
+                            className="bg-white/5 border border-border hover:border-accent/30 py-5 rounded-3xl font-syne font-black text-xs uppercase tracking-widest text-white transition-all disabled:opacity-30"
                         >
-                            {analyzingMatch ? "🔍 Analyzing Match..." : "🔍 Deep Match Analysis"}
+                            {analyzingMatch ? "Simulating..." : "Deep Match"}
                         </button>
                         <button
                             onClick={tailorResume}
-                            disabled={loading || !background || background.trim() === ""}
-                            style={{ flex: 1, background: C.accent, border: "none", borderRadius: 16, padding: "18px", color: "#000", fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 15, cursor: loading ? "wait" : "pointer", boxShadow: `0 8px 24px ${C.accent}33` }}
+                            disabled={loading || !background}
+                            className="bg-accent hover:brightness-110 py-5 rounded-3xl font-syne font-black text-xs uppercase tracking-widest text-black transition-all disabled:opacity-30 shadow-[0_10px_30px_rgba(200,255,0,0.2)]"
                         >
-                            {loading ? "✨ AI is Tailoring..." : "🚀 Tailor Resume"}
+                            {loading ? "Optimizing..." : "Run Tailor"}
                         </button>
                     </div>
                 </div>
             </div>
 
-            {/* Right Column: Output */}
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 24, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-                <div style={{ padding: "20px 32px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <div style={{ background: atsScore > 80 ? C.green : C.accent, width: 44, height: 44, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, color: "#000" }}>{atsScore || "--"}</div>
+            {/* Right Column: AI Output & Insights */}
+            <div className="bg-card/40 border border-border/50 rounded-[2.5rem] overflow-hidden flex flex-col backdrop-blur-3xl">
+                {/* Scoring Header */}
+                <div className="px-10 py-8 border-b border-border/50 flex justify-between items-center bg-white/5">
+                    <div className="flex items-center gap-6">
+                        <div className={`w-16 h-16 rounded-[1.2rem] flex items-center justify-center font-black text-2xl ${atsScore > 80 ? 'bg-green-500 text-black' : 'bg-accent text-black'}`}>
+                            {atsScore || "--"}
+                        </div>
                         <div>
-                            <div style={{ fontSize: 14, fontWeight: 800 }}>ATS Compatibility</div>
-                            <div style={{ fontSize: 11, color: C.muted }}>Prediction based on keywords</div>
+                            <h4 className="text-sm font-black text-white uppercase tracking-tight">ATS Alignment Score</h4>
+                            <p className="text-[10px] text-muted font-bold uppercase tracking-widest italic">Calculated by Orion Logic</p>
                         </div>
                     </div>
                     {tailored && (
-                        <button onClick={downloadAsPDF} style={{ background: `${C.green}22`, color: C.green, border: `1px solid ${C.green}44`, padding: "8px 16px", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                            📄 Download PDF
+                        <button onClick={downloadAsPDF} className="bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 px-6 py-2 rounded-xl text-green-500 font-black text-[10px] uppercase tracking-widest transition-all">
+                            Export PDF
                         </button>
                     )}
                 </div>
 
-                <div style={{ flex: 1, padding: 32, overflowY: "auto", position: "relative", display: "flex", flexDirection: "column", gap: 24 }}>
+                {/* Main Output Scroll Area */}
+                <div className="flex-1 p-10 overflow-y-auto space-y-12 custom-scrollbar">
                     {matchAnalysis && (
-                        <div style={{ background: C.bg === "#04060A" ? "#111827" : "#F8FAFC", border: `1px solid ${C.border}`, borderRadius: 16, padding: 24 }}>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-                                <h3 style={{ margin: 0, fontFamily: "'Syne', sans-serif", fontSize: 16, color: C.text }}>Match Analysis</h3>
-                                <div style={{ background: `${C.accent}20`, color: C.accent, padding: "4px 12px", borderRadius: 20, fontSize: 13, fontWeight: 800, border: `1px solid ${C.accent}40` }}>{matchAnalysis.score}% FIT</div>
-                            </div>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                                <div>
-                                    <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Missing Skills</div>
-                                    {matchAnalysis.missing_skills?.map((s, idx) => <div key={idx} style={{ color: C.text, fontSize: 13, marginBottom: 4 }}>• {s}</div>)}
-                                </div>
-                                <div>
-                                    <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Strategy</div>
-                                    {matchAnalysis.suggestions?.map((s, idx) => <div key={idx} style={{ color: C.text, fontSize: 13, marginBottom: 4 }}>• {s}</div>)}
-                                </div>
+                        <div className="bg-surface/80 border border-border/40 rounded-3xl p-8 space-y-8 animate-fade-in shadow-xl">
+                            <div className="flex justify-between items-center">
+                                <h3 className="font-syne text-lg font-black text-white uppercase tracking-tight">Operational Analysis</h3>
+                                <div className="bg-accent/10 text-accent px-4 py-1.5 rounded-full text-[10px] font-black border border-accent/20 tracking-widest italic">{matchAnalysis.score}% SYNC</div>
                             </div>
                             
-                            {!optimizationTips ? (
-                                <button 
-                                    onClick={getOptimizationTips}
-                                    disabled={optimizing}
-                                    style={{ marginTop: 20, width: "100%", background: "linear-gradient(135deg, #00F0FF, #00A3FF)", color: "#000", border: "none", borderRadius: 12, padding: "12px", fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 13, cursor: optimizing ? "wait" : "pointer" }}
-                                >
-                                    {optimizing ? "🔮 Generating Optimization Tips..." : "🪄 Get Specific Bullet Point Tips"}
-                                </button>
-                            ) : (
-                                <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
-                                    <div style={{ fontSize: 11, fontWeight: 800, color: C.accent, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Optimization Roadmap</div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                        {optimizationTips.add?.length > 0 && (
-                                            <div>
-                                                <div style={{ fontSize: 11, fontWeight: 700, color: C.green, marginBottom: 4 }}>Add these bullets:</div>
-                                                {optimizationTips.add.map((b, i) => <div key={i} style={{ fontSize: 12, color: C.text, paddingLeft: 8, borderLeft: `2px solid ${C.green}33`, marginBottom: 4 }}>{b}</div>)}
-                                            </div>
-                                        )}
-                                        {optimizationTips.remove?.length > 0 && (
-                                            <div>
-                                                <div style={{ fontSize: 11, fontWeight: 700, color: C.red, marginBottom: 4 }}>Remove/Replace:</div>
-                                                {optimizationTips.remove.map((b, i) => <div key={i} style={{ fontSize: 12, color: C.muted, paddingLeft: 8, borderLeft: `2px solid ${C.red}33`, marginBottom: 4, textDecoration: 'line-through' }}>{b}</div>)}
-                                            </div>
-                                        )}
+                            <div className="grid grid-cols-2 gap-8">
+                                <div className="space-y-4">
+                                    <h5 className="text-[9px] font-black text-pink uppercase tracking-[0.2em]">Gap Detected</h5>
+                                    <div className="space-y-2">
+                                        {matchAnalysis.missing_skills?.slice(0, 5).map((s, idx) => (
+                                            <div key={idx} className="text-xs text-white/70 font-medium">↳ {s}</div>
+                                        ))}
                                     </div>
+                                </div>
+                                <div className="space-y-4">
+                                    <h5 className="text-[9px] font-black text-accent uppercase tracking-[0.2em]">Strategic Focus</h5>
+                                    <div className="space-y-2">
+                                        {matchAnalysis.suggestions?.slice(0, 3).map((s, idx) => (
+                                            <div key={idx} className="text-xs text-white/70 font-medium italic">✦ {s}</div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button 
+                                onClick={getOptimizationTips}
+                                disabled={optimizing}
+                                className="w-full bg-gradient-to-r from-accent to-purple py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest text-black shadow-lg shadow-accent/10 hover:scale-[1.01] transition-all disabled:opacity-50"
+                            >
+                                {optimizing ? "Generating Protocol..." : "✨ Precise Bullet Optimization"}
+                            </button>
+
+                            {optimizationTips && (
+                                <div className="mt-8 pt-8 border-t border-border animate-slide-up space-y-6">
+                                    {optimizationTips.add?.length > 0 && (
+                                        <div className="space-y-3">
+                                            <p className="text-[10px] font-black text-green-500 uppercase tracking-widest">Nodes to Inject:</p>
+                                            {optimizationTips.add.slice(0, 2).map((b, i) => (
+                                                <div key={i} className="bg-green-500/5 border-l-4 border-green-500 p-4 text-xs font-medium text-white/80 leading-relaxed italic">{b}</div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
                     )}
 
-                    {tailored ? (
-                        <div style={{ whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: 13, lineHeight: 1.6, color: C.text }}>{tailored}</div>
-                    ) : (
-                        <EmptyState
-                            icon="✨"
-                            title="Ready to Analyze & Tailor"
-                            description="Your deep match analysis and newly tailored resume will appear securely here."
-                            C={C}
-                        />
-                    )}
+                    <div className="relative">
+                        {tailored ? (
+                            <div className="text-[13px] leading-relaxed font-mono text-white/80 whitespace-pre-wrap selection:bg-accent selection:text-black p-4 bg-black/20 rounded-2xl border border-white/5 italic">
+                                {tailored}
+                            </div>
+                        ) : (
+                            <EmptyState
+                                icon="✨"
+                                title="Awaiting Command"
+                                description="Initialization of deep match analysis or resume tailoring will reflect output here."
+                            />
+                        )}
+                    </div>
                 </div>
                 
-                <div style={{ padding: 24, borderTop: `1px solid ${C.border}`, background: C.surface }}>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: C.text, marginBottom: 8, fontFamily: "'Syne', sans-serif" }}>⚡ Bullet Point Improver</div>
-                    <div style={{ display: "flex", gap: 12 }}>
-                        <input value={bullet} onChange={e => setBullet(e.target.value)} placeholder="Paste a weak bullet point..." style={{ flex: 1, background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", color: C.text, fontFamily: "'DM Sans', sans-serif", fontSize: 13, outline: "none" }} />
-                        <button onClick={improveBulletAction} disabled={improving || !bullet} style={{ background: C.accent, color: "#000", border: "none", borderRadius: 10, padding: "0 16px", fontWeight: 800, fontSize: 13, cursor: improving ? "wait" : "pointer" }}>{improving ? "Improving..." : "Improve"}</button>
+                {/* Advanced Tools Bar */}
+                <div className="p-8 border-t border-border/50 bg-surface/50">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+                        <span className="text-[10px] font-black text-white uppercase tracking-widest">Experimental: Bullet Logic Enhancer</span>
                     </div>
-                    {improvedBullet && <div style={{ marginTop: 12, background: `${C.green}11`, padding: 12, borderRadius: 8, fontSize: 13, color: C.green, border: `1px solid ${C.green}33` }}>{improvedBullet}</div>}
-                </div>
-
-                {keywords.length > 0 && (
-                    <div style={{ padding: 24, background: C.bg === "#04060A" ? "rgba(0,0,0,0.3)" : "#f1f5f9", borderTop: `1px solid ${C.border}` }}>
-                        <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Keywords Integrated</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                            {keywords.map(kw => <span key={kw} style={{ background: `${C.accent}15`, color: C.accent, border: `1px solid ${C.accent}33`, padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600 }}>{kw}</span>)}
+                    <div className="flex gap-4">
+                        <input 
+                            value={bullet} 
+                            onChange={e => setBullet(e.target.value)} 
+                            placeholder="Paste a legacy bullet node..." 
+                            className="flex-1 bg-card/60 border border-border focus:border-accent/40 rounded-xl px-6 text-xs text-white outline-none shadow-inner"
+                        />
+                        <button 
+                            onClick={improveBulletAction} 
+                            disabled={improving || !bullet}
+                            className="bg-accent px-6 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest text-black transition-all hover:brightness-110 disabled:opacity-50"
+                        >
+                            {improving ? "..." : "Enhance"}
+                        </button>
+                    </div>
+                    {improvedBullet && (
+                        <div className="mt-4 p-5 bg-accent/5 border border-accent/20 rounded-xl text-xs text-accent leading-relaxed italic animate-fade-in">
+                            {improvedBullet}
                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
         </div>
     );

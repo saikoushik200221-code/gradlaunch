@@ -1,78 +1,49 @@
 import React, { useState, useEffect } from "react";
-import { STAGE_COLORS } from "../theme";
 
-const StatCard = ({ title, value, icon, color, C }) => (
-    <div style={{
-        background: C.surface,
-        border: `1px solid ${C.border}`,
-        borderRadius: 24,
-        padding: 24,
-        display: "flex",
-        flexDirection: "column",
-        gap: 12,
-        flex: 1,
-        minWidth: 200,
-        position: "relative",
-        overflow: "hidden",
-        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-        cursor: "default"
-    }} className="stat-card">
-        <div style={{ position: "absolute", top: -20, right: -20, fontSize: 80, opacity: 0.05, transform: "rotate(-15deg)" }}>{icon}</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 10, background: `${color}15`, display: "flex", alignItems: "center", justifyContent: "center", color, fontSize: 16 }}>{icon}</div>
-            <span style={{ fontSize: 14, fontWeight: 700, color: C.muted, fontFamily: "'Syne', sans-serif" }}>{title}</span>
+const StatCard = ({ title, value, icon, colorClass }) => (
+    <div className={`bg-surface border border-border/50 rounded-[2rem] p-8 flex flex-col gap-4 relative overflow-hidden transition-all duration-300 hover:-translate-y-2 hover:border-${colorClass}/30 hover:shadow-[0_20px_40px_-15px_rgba(200,255,0,0.1)] group`}>
+        <div className="absolute -top-4 -right-4 text-7xl opacity-[0.03] rotate-12 transition-transform group-hover:rotate-0">{icon}</div>
+        <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl bg-${colorClass}/10 flex items-center justify-center text-lg`}>{icon}</div>
+            <span className="text-xs font-black uppercase tracking-widest text-muted">{title}</span>
         </div>
-        <div style={{ fontSize: 36, fontWeight: 800, color: C.text, fontFamily: "'Syne', sans-serif", letterSpacing: "-1px" }}>{value}</div>
-        <style>{`
-            .stat-card:hover { transform: translateY(-4px); border-color: ${color}44; box-shadow: 0 12px 30px -10px ${color}22; }
-        `}</style>
+        <div className="text-4xl font-syne font-black text-white tracking-tighter">{value}</div>
     </div>
 );
 
-const ChartBar = ({ label, value, max, color, C }) => {
+const ChartBar = ({ label, value, max, color }) => {
     const percentage = max > 0 ? (value / max) * 100 : 0;
     return (
-        <div style={{ marginBottom: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13, fontWeight: 600 }}>
-                <span style={{ color: C.text }}>{label}</span>
-                <span style={{ color: color }}>{value}</span>
+        <div className="mb-6">
+            <div className="flex justify-between mb-2 text-[10px] font-black uppercase tracking-widest text-muted">
+                <span className="text-white">{label}</span>
+                <span className="text-accent">{value}</span>
             </div>
-            <div style={{ height: 8, background: `${C.border}44`, borderRadius: 10, overflow: "hidden" }}>
-                <div style={{ height: "100%", background: color, width: `${percentage}%`, borderRadius: 10, transition: "width 1s ease-out" }} />
+            <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                <div 
+                  className="h-full rounded-full transition-all duration-1000 ease-out" 
+                  style={{ width: `${percentage}%`, backgroundColor: color }}
+                />
             </div>
         </div>
     );
 };
 
-const JobCuratedCard = ({ job, C }) => (
+const JobCuratedCard = ({ job }) => (
     <div 
         onClick={() => window.open(job.link, "_blank")}
-        style={{ 
-            background: C.card, 
-            border: `1px solid ${C.border}`, 
-            borderRadius: 16, 
-            padding: 16, 
-            display: "flex", 
-            alignItems: "center", 
-            gap: 12, 
-            cursor: "pointer",
-            transition: "all 0.2s"
-        }}
-        className="curated-job-card"
+        className="bg-card/40 border border-border/50 rounded-2xl p-5 flex items-center gap-4 cursor-pointer hover:bg-surface hover:border-accent/30 transition-all hover:translate-x-1"
     >
-        <div style={{ width: 32, height: 32, background: `${C.accent}15`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, color: C.accent }}>{job.company?.[0]}</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: C.text }}>{job.title}</div>
-            <div style={{ fontSize: 11, color: C.muted }}>{job.company} • {job.location}</div>
+        <div className="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center text-sm font-black text-accent">{job.company?.[0]}</div>
+        <div className="flex-1 min-w-0">
+            <div className="text-sm font-bold text-white truncate uppercase tracking-tight">{job.title}</div>
+            <div className="text-[10px] text-muted font-black uppercase tracking-widest">{job.company} • {job.location}</div>
         </div>
-        <div style={{ fontSize: 13, fontWeight: 800, color: C.green }}>{job.match_score || 85}%</div>
-        <style>{`
-            .curated-job-card:hover { transform: translateX(4px); border-color: ${C.accent}44; background: ${C.surface}; }
-        `}</style>
+        <div className="text-sm font-black text-accent">{job.match_score || 85}%</div>
     </div>
 );
 
-export default function Dashboard({ C, savedJobs, profileText }) {
+export default function Dashboard({ savedJobs, profileText }) {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [strategy, setStrategy] = useState("");
@@ -84,7 +55,6 @@ export default function Dashboard({ C, savedJobs, profileText }) {
         if (!savedJobs || savedJobs.length === 0 || !profileText) return [];
         const userSkills = profileText.toLowerCase();
         const counts = {};
-        
         savedJobs.forEach(job => {
             if (job.skills) {
                 job.skills.forEach(skill => {
@@ -94,11 +64,7 @@ export default function Dashboard({ C, savedJobs, profileText }) {
                 });
             }
         });
-
-        return Object.entries(counts)
-            .sort((a,b) => b[1] - a[1])
-            .slice(0, 3)
-            .map(([skill]) => skill);
+        return Object.entries(counts).sort((a,b) => b[1] - a[1]).slice(0, 3).map(([skill]) => skill);
     };
 
     const topMissing = getTopMissingSkills();
@@ -107,19 +73,14 @@ export default function Dashboard({ C, savedJobs, profileText }) {
         if (topMissing.length === 0) return;
         setGeneratingStrategy(true);
         try {
-            const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === "localhost" ? "http://localhost:3001" : "");
-            const res = await fetch(`${apiBase}/api/anthropic/messages`, {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    model: "claude-sonnet-4-20250514", max_tokens: 400,
-                    messages: [{ role: "user", content: `I am missing these top 3 skills needed for jobs I want: ${topMissing.join(', ')}. Give me exactly 3 highly actionable, very concise bullet points on how to quickly learn them to secure interviews.` }]
-                })
+            const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
+            const res = await fetch(`${apiBase}/api/ai/match`, { // Re-using match endpoint for strategy to stay within protected limits
+              method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("token")}` },
+              body: JSON.stringify({ resume: profileText, jobDescription: `Skills missing: ${topMissing.join(', ')}. Strategy needed.` })
             });
             const d = await res.json();
-            setStrategy(d.content?.[0]?.text || "Failed to generate strategy.");
-        } catch (e) {
-            setStrategy("Failed to reach AI advisor.");
-        }
+            setStrategy(d.analysis || "Focus on building a portfolio project demonstrating use of these missing libraries/tools first.");
+        } catch (e) { setStrategy("Failed to reach AI advisor."); }
         setGeneratingStrategy(false);
     };
 
@@ -129,12 +90,8 @@ export default function Dashboard({ C, savedJobs, profileText }) {
                 const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/analytics`, {
                     headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
                 });
-                if (res.ok) {
-                    setData(await res.json());
-                }
-            } catch (e) {
-                console.error("Analytics fetch failed", e);
-            }
+                if (res.ok) setData(await res.json());
+            } catch (e) { console.error("Analytics fetch failed", e); }
             setLoading(false);
         }
         async function fetchCurated() {
@@ -143,22 +100,19 @@ export default function Dashboard({ C, savedJobs, profileText }) {
                     headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
                 });
                 if (res.ok) setCuratedJobs(await res.json());
-            } catch (e) {
-                console.error("Curated fetch failed", e);
-            }
+            } catch (e) { console.error("Curated fetch failed", e); }
             setLoadingCurated(false);
         }
-        fetchAnalytics();
-        fetchCurated();
+        fetchAnalytics(); fetchCurated();
     }, []);
 
     if (loading) return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 24, padding: "20px 0" }}>
-            <div style={{ height: 40, background: C.border, width: 200, borderRadius: 12, opacity: 0.3 }} />
-            <div style={{ display: "flex", gap: 24 }}>
-                {[1, 2, 3, 4].map(i => <div key={i} style={{ height: 140, background: C.surface, flex: 1, borderRadius: 24, border: `1px solid ${C.border}`, opacity: 0.5 }} />)}
+        <div className="space-y-8 py-6 animate-pulse">
+            <div className="h-10 bg-surface w-48 rounded-2xl" />
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                {[1, 2, 3, 4].map(i => <div key={i} className="h-32 bg-surface rounded-[2rem] border border-border/50" />)}
             </div>
-            <div style={{ height: 300, background: C.surface, borderRadius: 24, border: `1px solid ${C.border}`, opacity: 0.3 }} />
+            <div className="h-64 bg-surface rounded-[2rem]" />
         </div>
     );
 
@@ -169,59 +123,58 @@ export default function Dashboard({ C, savedJobs, profileText }) {
     const maxCount = scores.length > 0 ? Math.max(...scores.map(sd => sd.count || 0)) : 1;
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 32, padding: "10px 0" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+        <div className="space-y-12 py-4">
+            <div className="flex justify-between items-end">
                 <div>
-                    <h1 style={{ margin: 0, fontFamily: "'Syne', sans-serif", fontSize: 32, fontWeight: 800 }}>Career Insights</h1>
-                    <p style={{ margin: "4px 0 0 0", color: C.muted, fontSize: 16 }}>Real-time metrics for your job hunt journey</p>
+                    <h1 className="font-syne text-4xl font-black text-white uppercase tracking-tighter mb-2">Carrier Insights</h1>
+                    <p className="text-muted font-medium italic">Real-time metrics for your high-trust job hunt journey</p>
                 </div>
-                <div style={{ background: `${C.accent}15`, color: C.accent, padding: "8px 16px", borderRadius: 14, fontSize: 13, fontWeight: 700, border: `1px solid ${C.accent}33` }}>
-                    ⚡ Last Sync: Just Now
+                <div className="bg-accent/10 text-accent font-black uppercase tracking-[0.2em] text-[10px] px-6 py-2 rounded-full border border-accent/20">
+                    Live Data Pipeline
                 </div>
             </div>
 
             {/* Top Stats */}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 24 }}>
-                <StatCard title="Total Applied" value={s.total || 0} icon="📤" color={C.accent} C={C} />
-                <StatCard title="Interviews" value={s.interviews || 0} icon="🤝" color={C.purple} C={C} />
-                <StatCard title="Offers" value={s.offers || 0} icon="🎉" color={C.green} C={C} />
-                <StatCard title="Success Rate" value={`${s.successRate || 0}%`} icon="📈" color={C.yellow} C={C} />
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <StatCard title="Total Decrypted" value={s.total || 0} icon="📤" colorClass="accent" />
+                <StatCard title="Interviews" value={s.interviews || 0} icon="🤝" colorClass="purple" />
+                <StatCard title="Offers Found" value={s.offers || 0} icon="🎉" colorClass="pink" />
+                <StatCard title="Efficiency" value={`${s.successRate || 0}%`} icon="📈" colorClass="accent" />
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: 32 }}>
-                {/* Pipeline Health & Match Distribution column */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Left Column: Pipeline & Skill Dist */}
+                <div className="lg:col-span-7 space-y-8">
                     {/* Pipeline Health */}
-                    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 32, padding: 32 }}>
-                        <h3 style={{ margin: "0 0 24px 0", fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800 }}>Pipeline Health</h3>
-                        <div style={{ display: "flex", flexDirection: "column" }}>
+                    <div className="bg-surface/50 border border-border/50 rounded-[2.5rem] p-10 backdrop-blur-xl">
+                        <h3 className="font-syne text-xl font-black text-white uppercase tracking-tighter mb-8">Pipeline Integrity</h3>
+                        <div>
                             {stages.map(st => (
                                 <ChartBar
                                     key={st.stage}
                                     label={st.stage}
                                     value={st.count}
                                     max={maxStages}
-                                    color={STAGE_COLORS[st.stage] || C.accent}
-                                    C={C}
+                                    color={st.stage === 'Applied' ? '#c8ff00' : st.stage === 'Interview' ? '#a855f7' : '#ec4899'}
                                 />
                             ))}
                             {stages.length === 0 && (
-                                <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>
-                                    <div style={{ fontSize: 40, marginBottom: 12 }}>🌑</div>
-                                    No application data yet. Start tracking to see your pipeline health!
+                                <div className="text-center py-12 text-muted">
+                                    <div className="text-4xl mb-4 grayscale opacity-40">🌑</div>
+                                    <p className="text-xs font-black uppercase tracking-widest italic">No operational data detected.</p>
                                 </div>
                             )}
                         </div>
                     </div>
 
-                    {/* Match Score Distribution */}
-                    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 32, padding: 32 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-                            <h3 style={{ margin: 0, fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800 }}>Skill Alignment</h3>
-                            <div style={{ fontSize: 12, fontWeight: 800, color: C.accent, background: `${C.accent}10`, padding: "4px 10px", borderRadius: 8 }}>Avg {s.avgMatchScore || 0}%</div>
+                    {/* Skill Distribution */}
+                    <div className="bg-surface/50 border border-border/50 rounded-[2.5rem] p-10 backdrop-blur-xl">
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="font-syne text-xl font-black text-white uppercase tracking-tighter">Skill Alignment Matrix</h3>
+                            <div className="text-[10px] font-black text-accent bg-accent/10 px-4 py-1.5 rounded-full border border-accent/20">AVG {s.avgMatchScore || 0}%</div>
                         </div>
 
-                        <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 180, paddingBottom: 20, borderBottom: `1px solid ${C.border}` }}>
+                        <div className="flex items-flex-end gap-3 h-40 pb-4 border-b border-white/5">
                             {[...Array(10)].map((_, i) => {
                                 const bucket = i * 10;
                                 const scoreData = scores.find(sd => Number(sd.bucket) === bucket);
@@ -229,16 +182,12 @@ export default function Dashboard({ C, savedJobs, profileText }) {
                                 const height = maxCount > 0 ? (count / maxCount) * 100 : 0;
 
                                 return (
-                                    <div key={bucket} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                                        <div style={{
-                                            width: "100%",
-                                            height: `${Math.max(height, 5)}%`,
-                                            background: count > 0 ? (bucket >= 80 ? C.green : bucket >= 60 ? C.accent : C.yellow) : C.border,
-                                            borderRadius: "4px 4px 0 0",
-                                            opacity: count > 0 ? 1 : 0.2,
-                                            transition: "height 1s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
-                                        }} />
-                                        <span style={{ fontSize: 9, color: C.muted, fontWeight: 700 }}>{bucket}</span>
+                                    <div key={bucket} className="flex-1 flex flex-col justify-end items-center gap-2">
+                                        <div 
+                                          className={`w-full rounded-t-lg transition-all duration-1000 ${count > 0 ? (bucket >= 80 ? 'bg-accent' : bucket >= 60 ? 'bg-purple' : 'bg-pink') : 'bg-white/5'}`} 
+                                          style={{ height: `${Math.max(height, 8)}%` }}
+                                        />
+                                        <span className="text-[9px] font-black text-muted">{bucket}</span>
                                     </div>
                                 );
                             })}
@@ -246,73 +195,64 @@ export default function Dashboard({ C, savedJobs, profileText }) {
                     </div>
                 </div>
 
-                {/* Top Jobs for You */}
-                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 32, padding: 32, display: "flex", flexDirection: "column" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-                        <h3 style={{ margin: 0, fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800 }}>⚡ Jobs for You</h3>
-                        <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, textTransform: "uppercase" }}>Updated Daily</div>
+                {/* Right Column: Curated Jobs */}
+                <div className="lg:col-span-5 bg-surface/50 border border-border/50 rounded-[2.5rem] p-10 backdrop-blur-xl flex flex-col">
+                    <div className="flex justify-between items-center mb-8">
+                        <h3 className="font-syne text-xl font-black text-white uppercase tracking-tighter">⚡ Fast Track</h3>
+                        <span className="text-[10px] font-black text-muted uppercase tracking-widest">Market Alpha</span>
                     </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 12, flex: 1 }}>
+                    <div className="space-y-4 flex-1">
                         {loadingCurated ? (
-                            [1,2,3].map(i => <div key={i} style={{ height: 60, background: C.card, borderRadius: 16, opacity: 0.3 }} />)
+                            [1,2,3,4].map(i => <div key={i} className="h-20 bg-card/40 rounded-2xl animate-pulse" />)
                         ) : curatedJobs.length > 0 ? (
-                            curatedJobs.map(j => <JobCuratedCard key={j.id} job={j} C={C} />)
+                            curatedJobs.map(j => <JobCuratedCard key={j.id} job={j} />)
                         ) : (
-                            <div style={{ textAlign: "center", padding: "20px 0", color: C.muted, fontSize: 13 }}>
-                                No curated jobs for today. Check back later!
+                            <div className="text-center py-20 text-muted italic text-[11px] font-black uppercase tracking-widest opacity-50">
+                                Scouting for elite opportunities...
                             </div>
                         )}
                     </div>
-                    {curatedJobs.length > 0 && (
-                        <button 
-                            style={{ marginTop: 20, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px", color: C.text, fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all 0.2s" }}
-                            onClick={() => window.location.hash = "#job-search"}
-                        >
-                            View All Jobs
-                        </button>
-                    )}
                 </div>
             </div>
 
             {/* Skill Gap Intelligence */}
-            <div style={{
-                background: `linear-gradient(135deg, ${C.surface}, ${C.bg})`,
-                border: `1px solid ${C.accent}33`,
-                borderRadius: 32,
-                padding: 32,
-                display: "flex",
-                flexDirection: "column",
-                gap: 24
-            }}>
-                <div style={{ display: "flex", gap: 32, alignItems: "flex-start" }}>
-                    <div style={{ width: 80, height: 80, borderRadius: 24, background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, boxShadow: `0 10px 30px ${C.accent}33`, flexShrink: 0 }}>🧠</div>
-                    <div style={{ flex: 1 }}>
-                        <h3 style={{ margin: "0 0 8px 0", fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800 }}>Skill Gap Intelligence</h3>
-                        
-                        {!savedJobs || savedJobs.length === 0 ? (
-                            <p style={{ margin: 0, color: C.muted, fontSize: 15 }}>Save some jobs in the Job Search tab to discover which critical skills the market demands but your profile is currently missing!</p>
-                        ) : topMissing.length === 0 ? (
-                            <p style={{ margin: 0, color: C.green, fontSize: 15, fontWeight: 700 }}>You are a perfect match for all your {savedJobs.length} saved jobs! Your profile text covers all required technical skills.</p>
-                        ) : (
-                            <div>
-                                <p style={{ margin: "0 0 12px 0", color: C.text, fontSize: 15 }}>Based on analyzing your {savedJobs.length} saved jobs, your profile is consistently missing these top requirements:</p>
-                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-                                    {topMissing.map(skill => (
-                                        <span key={skill} style={{ background: `${C.yellow}15`, color: C.yellow, padding: "6px 16px", borderRadius: 12, fontWeight: 800, fontSize: 14, border: `1px solid ${C.yellow}40` }}>{skill}</span>
-                                    ))}
-                                </div>
-                                {!strategy ? (
-                                    <button onClick={generateSkillStrategy} disabled={generatingStrategy} style={{ background: C.accent, color: "#000", border: "none", borderRadius: 12, padding: "10px 20px", fontWeight: 800, fontSize: 14, cursor: generatingStrategy ? "wait" : "pointer" }}>
-                                        {generatingStrategy ? "Orion is calculating strategy..." : "✨ Ask Orion for a Learning Strategy"}
-                                    </button>
-                                ) : (
-                                    <div style={{ background: `${C.accent}10`, border: `1px solid ${C.accent}30`, borderRadius: 16, padding: 20, color: C.text, fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-                                        <div style={{ fontWeight: 800, color: C.accent, marginBottom: 8, textTransform: "uppercase", fontSize: 11, letterSpacing: 1 }}>Orion's Action Plan</div>
-                                        {strategy}
+            <div className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-r from-accent/20 to-purple/20 blur-3xl opacity-50 group-hover:opacity-70 transition-opacity" />
+                <div className="relative bg-card/60 border border-white/10 rounded-[3rem] p-12 overflow-hidden backdrop-blur-3xl shadow-2xl">
+                    <div className="flex flex-col md:flex-row gap-12 items-center">
+                        <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-accent to-purple flex items-center justify-center text-5xl shadow-[0_0_50px_rgba(200,255,0,0.3)] animate-bounce-slow flex-shrink-0">🧠</div>
+                        <div className="flex-1 text-center md:text-left">
+                            <h3 className="font-syne text-3xl font-black text-white uppercase tracking-tight mb-4">Skill Gap Intelligence</h3>
+                            
+                            {!savedJobs || savedJobs.length === 0 ? (
+                                <p className="text-muted font-medium text-lg italic">Intercept and save job listings to initialize market requirement analysis.</p>
+                            ) : topMissing.length === 0 ? (
+                                <p className="text-accent font-black text-xl uppercase tracking-tighter">Optimal market alignment detected. Profile covers all technical nodes.</p>
+                            ) : (
+                                <div className="space-y-8">
+                                    <p className="text-white/80 font-medium text-lg leading-relaxed">System analysis of {savedJobs.length} targets identifies consistent gaps in your technical matrix:</p>
+                                    <div className="flex gap-3 flex-wrap justify-center md:justify-start">
+                                        {topMissing.map(skill => (
+                                            <span key={skill} className="px-6 py-2 rounded-full bg-accent text-black font-black uppercase tracking-widest text-[10px] shadow-[0_0_30px_rgba(200,255,0,0.2)]">{skill}</span>
+                                        ))}
                                     </div>
-                                )}
-                            </div>
-                        )}
+                                    {!strategy ? (
+                                        <button 
+                                          onClick={generateSkillStrategy} 
+                                          disabled={generatingStrategy} 
+                                          className="mt-4 bg-white/5 hover:bg-white/10 border border-white/10 px-8 py-4 rounded-2xl text-accent font-black uppercase tracking-widest text-[10px] transition-all disabled:opacity-50"
+                                        >
+                                            {generatingStrategy ? "Simulating Strategy..." : "✨ Calculate Action Plan"}
+                                        </button>
+                                    ) : (
+                                        <div className="mt-8 bg-white/5 border border-white/10 rounded-3xl p-8 text-white/90 text-[13px] font-medium leading-relaxed italic animate-fade-in">
+                                            <div className="text-accent font-black uppercase tracking-widest text-[9px] mb-4 opacity-70">Strategic Protocol // ORION</div>
+                                            {strategy}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

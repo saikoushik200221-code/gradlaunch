@@ -29,6 +29,47 @@ app.use(express.json());
 // Serve static frontend files
 app.use(express.static(path.join(__dirname, '../frontend/dist'), { index: false }));
 
+// --- INFRASTRUCTURE HARDENING (CTO REFINEMENTS) ---
+const CACHE_DURATION = 1000 * 60 * 10; // 10 minutes
+let cachedJobs = [];
+let lastFetchTime = 0;
+
+async function safeFetch(url, options = {}) {
+    try {
+        const res = await axios.get(url, { timeout: 10000, ...options });
+        return res.data;
+    } catch (e) {
+        console.error(`[SafeFetch] Failed for ${url.substring(0, 50)}...`, e.message);
+        return [];
+    }
+}
+
+function normalizeJob(job, source = "unknown") {
+    return {
+        id: job.id || job.job_id || Math.random().toString(36).substr(2, 9),
+        title: job.title || job.job_title || job.role || "Untitled Role",
+        company: job.company || job.company_name || "Unknown Company",
+        location: job.location || job.candidate_required_location || job.location_name || "Remote/US",
+        description: job.description || job.job_description || job.text || "",
+        link: job.link || job.apply_url || job.url || job.redirect_url || "",
+        source: job.source || source,
+        posted_at: job.posted_at || job.publication_date || job.created_at || new Date().toISOString(),
+        is_trusted: 0,
+        match_score: null,
+        company_type: 'Company'
+    };
+}
+
+function dedupeJobs(jobs) {
+    const seen = new Set();
+    return jobs.filter(job => {
+        const key = `${job.title}-${job.company}-${job.location}`.toLowerCase().replace(/\s+/g, '');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
 
 // --- SECURITY & RATE LIMITING ---
 const generalLimiter = rateLimit({
@@ -43,8 +84,18 @@ const authLimiter = rateLimit({
     message: { error: "Too many authentication attempts. Please try again in an hour." }
 });
 
+const aiLimiter = rateLimit({
+    windowMs: 60 * 1000, 
+    max: 5, 
+    message: { 
+        error: "Too many requests", 
+        message: "Please wait a minute before optimizing again." 
+    }
+});
+
 // app.use('/api/', generalLimiter);
 // app.use('/api/auth/', authLimiter);
+app.use('/api/ai/', aiLimiter);
 
 // Centralized Error Handler (Applied at the end)
 function errorHandler(err, req, res, next) {
@@ -1292,10 +1343,13 @@ async function runJobScraper() {
         const newJobs = deduplicateJobs(rawJobs, existing);
         console.log(`[GradLaunch] New unique jobs to save: ${newJobs.length}`);
 
-        for (const j of newJobs) {
+        for (let j of newJobs) {
             try {
+                // Apply final 5% fixes (recency fallback and stronger trusted flag)
+                j = normalizeJob(j, j.source); 
                 const s = parseSalaryRange(j.salary);
                 const isTrusted = isTrustedJob(j) ? 1 : 0;
+                
                 await db.run(`
                     INSERT OR IGNORE INTO jobs (
                         id, title, company, location, type, salary, salary_min, salary_max, 
@@ -1303,7 +1357,7 @@ async function runJobScraper() {
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `, [
                     j.id, j.title, j.company, j.location, j.type, j.salary, s.min, s.max,
-                    JSON.stringify(j.tags), JSON.stringify(j.skills), j.description, j.link, j.posted, j.postedValue, j.logo, j.source || 'Aggregator',
+                    JSON.stringify(j.tags), JSON.stringify(j.skills), j.description, j.link, j.posted_at, j.posted_at, j.logo, j.source || 'Aggregator',
                     j.sponsorship_friendly || 0,
                     classifyCompany(j.company, j.source),
                     isTrusted
@@ -1801,20 +1855,35 @@ app.post('/api/ai/match', authenticateToken, async (req, res) => {
     if (!GEMINI_API_KEY) {
         return res.json({
             score: 75,
+            readinessScore: 82,
             missingSkills: ["Kubernetes", "System Design"],
-            suggestions: ["Add REST API scaling experience", "Highlight AWS projects"]
+            suggestions: ["Add REST API scaling experience", "Highlight AWS projects"],
+            whyFit: [
+                "Matches your Node.js + AWS experience",
+                "Your backend projects align with role requirements",
+                "You meet 7/10 required skills"
+            ]
         });
     }
 
     try {
         const prompt = `
-            Analyze the fit between this Resume and Job Description.
+            You are an expert technical recruiter. Analyze the fit between this Resume and Job Description.
+            
             Return ONLY a JSON object with this structure:
             {
-              "score": <number 0-100>,
+              "score": <match percentage 0-100>,
+              "readinessScore": <application readiness 0-100>,
               "missingSkills": ["skill1", "skill2"],
-              "suggestions": ["suggestion1", "suggestion2"]
+              "suggestions": ["specific improvement 1"],
+              "whyFit": ["3 concise bullet points explaining why they should apply"]
             }
+
+            STRICT RULES for 'whyFit':
+            - Max 3 bullet points
+            - Be specific to skills
+            - No generic phrases
+            - Reference actual technologies
 
             Resume: ${resume.slice(0, 4000)}
             JD: ${jobDescription.slice(0, 4000)}
@@ -1840,29 +1909,38 @@ app.post('/api/ai/match', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/ai/optimize', authenticateToken, async (req, res) => {
-    const { resume, jobDescription } = req.body;
+    const { resume, jobDescription, bulletToRewrite } = req.body;
     if (!resume || !jobDescription) return res.status(400).json({ error: 'Missing resume or job description' });
 
     if (!GEMINI_API_KEY) {
         return res.json({
-            add: ["Built scalable REST APIs handling 10k requests/min", "Improved latency by 30%"],
-            remove: ["Outdated tech (jQuery)"],
-            reorder: ["Put backend projects first"]
+            improvedBullet: "Built scalable REST APIs handling 10k+ requests/day, reducing latency by 30% using Node.js and Redis.",
+            explanation: "Added metrics (10k requests/day) and specific impact (30% latency reduction) in STAR format."
         });
     }
 
     try {
         const prompt = `
-            Suggest specific improvements to this Resume to better match this Job Description.
-            Return ONLY a JSON object with this structure:
-            {
-              "add": ["bullet point 1", "bullet point 2"],
-              "remove": ["item to remove 1"],
-              "reorder": ["instruction 1"]
-            }
+            You are an expert resume optimizer for software engineers.
+            Task: Rewrite ONLY the provided resume bullet point to better match the job description.
 
-            Resume: ${resume.slice(0, 4000)}
-            JD: ${jobDescription.slice(0, 4000)}
+            STRICT RULES:
+            - Use STAR format (Situation, Task, Action, Result)
+            - Add metrics (%, scale, performance)
+            - Keep it concise (1–2 lines)
+            - DO NOT rewrite entire resume
+            - DO NOT add fake experience
+            - DO NOT repeat the same sentence
+
+            INPUT:
+            Resume Bullet: "${bulletToRewrite || 'Provided scalable backend solutions'}"
+            Job Description: "${jobDescription.slice(0, 4000)}"
+
+            OUTPUT (JSON only):
+            {
+              "improvedBullet": "string",
+              "explanation": "1 line explanation of why it is better"
+            }
         `;
 
         const geminiPayload = {

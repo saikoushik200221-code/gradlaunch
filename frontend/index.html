@@ -4,7 +4,74 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GradLaunch</title>
+    <title>GradLaunch | AI Job Copilot</title>
+    <!-- Tailwind CDN (Post-fallback) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              background: '#0a0a0b',
+              surface: '#121214',
+              card: '#18181b',
+              accent: '#c8ff00',
+              purple: '#a855f7',
+              pink: '#ec4899',
+              muted: '#71717a',
+              border: '#27272a',
+            },
+            fontFamily: {
+              syne: ['Syne', 'sans-serif'],
+              inter: ['Inter', 'sans-serif'],
+            },
+            animation: {
+              'slide-in': 'slideIn 0.3s ease-out forwards',
+              'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'fade-in': 'fadeIn 0.5s ease-out forwards',
+              'bounce-slow': 'bounce 3s infinite',
+            },
+            keyframes: {
+              slideIn: {
+                '0%': { transform: 'translateX(100%)' },
+                '100%': { transform: 'translateX(0)' },
+              },
+              slideUp: {
+                '0%': { transform: 'translateY(20px)', opacity: '0' },
+                '100%': { transform: 'translateY(0)', opacity: '1' },
+              },
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+            },
+          }
+        }
+      }
+    </script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@700;800&display=swap');
+      
+      body {
+        background-color: #0a0a0b;
+        color: white;
+        overflow: hidden;
+      }
+
+      .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+      .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+      .custom-scrollbar::-webkit-scrollbar-thumb { background: #27272a; border-radius: 10px; }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+
+      ::selection {
+        background: #c8ff0033;
+        color: #c8ff00;
+      }
+    </style>
+    <!-- Premium Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   </head>
   <body>
