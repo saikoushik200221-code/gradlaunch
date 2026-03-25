@@ -195,6 +195,26 @@ export default function Dashboard({ savedJobs, profileText, currentUser }) {
                     <div className="text-[10px] font-black text-muted uppercase tracking-widest">Market Ready Threshold: 80%</div>
                 </div>
             </div>
+
+            {/* OPT Compliance Assurance */}
+            <div className="bg-surface/50 border border-accent/20 rounded-[3rem] p-10 backdrop-blur-xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-40 h-40 bg-accent/5 blur-3xl rounded-full pointer-events-none" />
+                <div className="flex flex-col md:flex-row items-start gap-8 relative z-10">
+                    <div className="w-16 h-16 bg-accent/10 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0">🛡️</div>
+                    <div className="flex-1 space-y-3">
+                        <h3 className="font-syne text-xl font-black text-white uppercase tracking-tight">100% OPT Compliant. Direct Hire Only.</h3>
+                        <p className="text-muted text-sm font-medium leading-relaxed">
+                            Every job surfaced by GradLaunch is a direct, full-time role compliant with F-1/OPT regulations. 
+                            No C2C contracts, no staffing agencies, no proxy employment — only legitimate opportunities that protect your H-1B path.
+                        </p>
+                        <div className="flex flex-wrap gap-3 pt-2">
+                            {["H-1B Safe", "No C2C", "Direct Hire", "STEM-OPT Verified", "E-Verify Partners"].map((tag) => (
+                                <span key={tag} className="bg-accent/10 border border-accent/20 text-accent text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl">{tag}</span>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { TagBadge, LogoCircle, MatchRing, SkeletonCard, EmptyState, TrustBadge, RecentlyPostedBadge } from "./Common";
+import { TagBadge, LogoCircle, MatchRing, SkeletonCard, EmptyState, TrustBadge, RecentlyPostedBadge, MatchChanceBadge } from "./Common";
 
 export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, profileText, C }) {
     const [jobs, setJobs] = useState([]);
