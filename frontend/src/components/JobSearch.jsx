@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { TagBadge, LogoCircle, MatchRing, SkeletonCard, EmptyState, TrustBadge, RecentlyPostedBadge, MatchChanceBadge } from "./Common";
+import { computeSemanticScores } from "../utils/matching";
 
 export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, profileText, C }) {
     const [jobs, setJobs] = useState([]);
@@ -31,7 +32,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                 const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/jobs?${params.toString()}`);
                 if (res.ok) {
                     const data = await res.json();
-                    setJobs(data || []);
+                    setJobs(computeSemanticScores(profileText, data || []));
                     setLastUpdated(new Date());
                     if (!data || data.length === 0) {
                         retryTimer = setTimeout(() => setRetryCount(c => c + 1), 10000);

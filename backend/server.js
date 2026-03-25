@@ -533,22 +533,21 @@ app.get('/api/jobs/curated', authenticateToken, async (req, res) => {
         const user = await db.get('SELECT profile FROM users WHERE id = ?', [req.user.id]);
         const profile = user?.profile?.toLowerCase() || "";
         
-        // Curation Logic: Trusted, Recent, and potentially matching keywords from profile
-        // We'll use a simple keyword match for now, or just high-quality fresh jobs
+        // Curation Logic: We want fresh jobs to populate the Dashboard
+        // Currently, 'is_trusted' might not be set by all scrappers, so we fall back to generic fresh jobs 
+        // to ensure the dashboard "Top Jobs Today" is never empty.
         let query = `
             SELECT * FROM jobs 
-            WHERE is_trusted = 1 
-            AND posted_value > ? 
+            WHERE posted_value > ? 
             ORDER BY posted_value DESC 
             LIMIT 10
         `;
         const fortyEightHoursAgo = Date.now() - (48 * 60 * 60 * 1000);
-        const jobs = await db.all(query, [fortyEightHoursAgo]);
+        let jobs = await db.all(query, [fortyEightHoursAgo]);
 
-        // If not enough jobs, relax the time constraint
+        // If not enough jobs, drop the time constraint completely and just grab the latest 10
         if (jobs.length < 5) {
-            const fiveDaysAgo = Date.now() - (5 * 24 * 60 * 60 * 1000);
-            return res.json(await db.all(`SELECT * FROM jobs WHERE is_trusted = 1 AND posted_value > ? ORDER BY posted_value DESC LIMIT 10`, [fiveDaysAgo]));
+            jobs = await db.all(`SELECT * FROM jobs ORDER BY posted_value DESC LIMIT 10`);
         }
 
         res.json(jobs);
