@@ -808,7 +808,8 @@ async function scrapeCareerjet() {
         console.log('[GradLaunch] Fetching from Careerjet API - Multi-page...');
         for (const query of queries) {
             for (let page = 1; page <= 3; page++) {
-                const url = `https://public.api.careerjet.net/search?affid=${CAREERJET_AFFID}&keywords=${encodeURIComponent(query)}&location=usa&user_ip=1.1.1.1&user_agent=GradLaunchBot/1.0&page=${page}`;
+                // Use en_US domain explicitly for US jobs
+                const url = `https://www.careerjet.com/api/search?affid=${CAREERJET_AFFID}&keywords=${encodeURIComponent(query)}&location=usa&user_ip=1.1.1.1&user_agent=GradLaunchBot/1.0&page=${page}`;
                 const { data } = await axios.get(url, { timeout: 15000 });
                 
                 if (data && data.jobs) {
@@ -1279,8 +1280,8 @@ async function runJobScraper() {
 
         // Cleanup old jobs (older than 7 days)
         await db.run("DELETE FROM jobs WHERE created_at < datetime('now', '-7 days')");
-        // Cleanup non-US jobs (aggressive prune)
-        await db.run("DELETE FROM jobs WHERE (LOWER(location) NOT LIKE '%usa%' AND LOWER(location) NOT LIKE '%united states%' AND LOWER(location) NOT LIKE '%remote%' AND LOWER(location) NOT LIKE '%worldwide%' AND location != 'USA')");
+        // Cleanup non-US jobs (Strict V3 - Scorched Earth)
+        await db.run("DELETE FROM jobs WHERE (LOWER(location) NOT LIKE '%usa%' AND LOWER(location) NOT LIKE '%united states%' AND LOWER(location) NOT LIKE '%remote%' AND LOWER(location) NOT LIKE '%distributed%') OR location IS NULL OR location = ''");
 
         // [Phase 9] Send email alerts for new high-match jobs
         if (newJobs.length > 0) {
@@ -1434,9 +1435,9 @@ function isUSJob(job) {
     if (loc.includes("remote")) return true;
     if (NON_US.some(kw => loc.includes(kw))) return false;
     if (US_KEYWORDS.some(kw => loc.includes(kw))) return true;
-    if (!loc || loc === "null") return true; 
-
-    return false;
+    
+    // Default to false for jobs with missing locations (strict safety)
+    return false; 
 }
 
 function analyzeSponsorship(title, desc) {
