@@ -159,6 +159,16 @@ async function initDb() {
         CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, title TEXT, company TEXT, location TEXT, type TEXT, salary TEXT, salary_min INTEGER, salary_max INTEGER, tags TEXT, skills TEXT, description TEXT, link TEXT, posted TEXT, posted_value INTEGER, embedding TEXT, logo TEXT, match_score INTEGER, source TEXT, sponsorship_friendly INTEGER, company_type TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)
     `);
     try { await db.exec(`CREATE INDEX IF NOT EXISTS idx_jobs_company_title ON jobs(company, title)`); } catch (e) { }
+    
+    // Migration: Update existing company types with refined classifier
+    try {
+        const allJobs = await db.all("SELECT id, company, source FROM jobs");
+        for (const job of allJobs) {
+            const newType = classifyCompany(job.company, job.source);
+            await db.run("UPDATE jobs SET company_type = ? WHERE id = ?", [newType, job.id]);
+        }
+        console.log(`[GradLaunch] Retroactively re-classified ${allJobs.length} jobs.`);
+    } catch (e) { console.error("Re-classification failed", e); }
     // Migration: add email_notifications column
     try { await db.exec(`ALTER TABLE users ADD COLUMN email_notifications TEXT DEFAULT 'none'`); } catch (e) { }
     // Migration: add interview_date column to applications
@@ -1400,22 +1410,18 @@ function classifyCompany(company, source) {
     const c = (company || "").toLowerCase();
     const MNCs = [
         "google", "amazon", "microsoft", "meta", "netflix", "apple", "adobe", "salesforce", "nvidia", "intel", "oracle", "cisco", "ibm",
-        "jpmorgan", "goldman sachs", "capital one", "visa", "mastercard", "american express", "well fargo", "bank of america",
+        "jpmorgan", "goldman sachs", "capital one", "visa", "mastercard", "american express", "wells fargo", "bank of america", "citi",
         "disney", "nike", "ford", "tesla", "spacex", "uber", "airbnb", "lyft", "door dash", "instacart", "stripe", "coinbase",
-        "deloitte", "accenture", "pwc", "ey", "kpmg", "mckinsey", "boston consulting", "walmart", "target", "costco", "starbucks"
+        "deloitte", "accenture", "pwc", "ey", "kpmg", "mckinsey", "boston consulting", "walmart", "target", "costco", "starbucks",
+        "at&t", "verizon", "t-mobile", "comcast", "boeing", "lockheed", "raytheon", "general electric", "honeywell", "3m",
+        "pfizer", "moderna", "johnson & johnson", "merck", "unitedhealth", "cvs", "anthem", "humana", "fidelity", "charles schwab"
     ];
     
-    // Heuristics
-    if (source === 'HN' || source === 'WWR' || source === 'RemoteOK') return 'Startup';
     if (MNCs.some(name => c.includes(name))) return 'Big MNC';
+    if (source === 'HN' || source === 'WWR' || source === 'RemoteOK') return 'Startup';
     
-    // Check for common MNC suffixes
-    if (c.includes(" corp") || c.includes(" inc") || c.includes(" systems") || c.includes(" technologies") || c.includes(" group")) {
-        // Many tech startups also use "Inc", so this is a soft signal. 
-        // For now, if it's not in the known MNC list, call it "Company" or "Startup" based on source.
-    }
-
-    return 'Startup'; // Default to startup for aggregator roles if not a known giant
+    // If it's from a broad aggregator, default to "Company" unless it matches a known giant
+    return 'Company'; 
 }
 
 function isUSJob(job) {

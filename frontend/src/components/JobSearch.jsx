@@ -357,7 +357,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                                     </div>
                                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
                                         <span style={{ fontSize: 16, fontWeight: 800, color: C.accent, fontFamily: "'Syne', sans-serif" }}>{job.company}</span>
-                                        {job.company_type && (
+                                        {job.company_type && job.company_type !== 'Company' && (
                                             <span style={{ 
                                                 fontSize: 10, 
                                                 background: job.company_type === 'Big MNC' ? '#3b82f622' : '#f59e0b22', 
