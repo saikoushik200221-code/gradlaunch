@@ -24,6 +24,7 @@ const { ResumeMatchingEngine } = require('./services/resume-matching');
 const { AIFormFiller } = require('./services/ai-form-filler');
 const { AnalyticsService } = require('./services/analytics');
 const { ABTestingService } = require('./services/ab-testing');
+const { AdzunaService } = require('./services/adzuna');
 const { AgentOrchestrator } = require('./AgentOrchestrator');
 const { registerWeightExperiments } = require('./experiments/weight-configs');
 const { registerPromptExperiments } = require('./experiments/ai-prompts');
@@ -36,6 +37,7 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 // Initialize Intelligence Services
 const matchingEngine = new ResumeMatchingEngine();
 const formFiller = new AIFormFiller();
+const adzunaService = new AdzunaService();
 let analyticsService;
 let abTestingService;
 
@@ -839,6 +841,89 @@ app.get('/api/jobs/matched', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('[MatchedJobs] Error:', error);
         res.status(500).json({ error: 'Failed to fetch matched jobs' });
+    }
+});
+
+/**
+ * GET /api/jobs/adzuna/search
+ * Search jobs using Adzuna API (100+ job boards aggregated)
+ */
+app.get('/api/jobs/adzuna/search', authenticateToken, async (req, res) => {
+    try {
+        const { query = '', location = 'US', limit = 25, fullTimeOnly = false } = req.query;
+
+        if (!query) {
+            return res.status(400).json({ error: 'Search query required' });
+        }
+
+        const filters = {
+            limit: parseInt(limit),
+            fullTimeOnly: fullTimeOnly === 'true',
+            sortBy: 'date'
+        };
+
+        const jobs = await adzunaService.searchJobs(query, location, filters);
+
+        res.json({
+            success: true,
+            query,
+            location,
+            total: jobs.length,
+            jobs
+        });
+    } catch (error) {
+        console.error('[Adzuna Search] Error:', error);
+        res.status(500).json({ error: 'Failed to search jobs' });
+    }
+});
+
+/**
+ * GET /api/jobs/adzuna/skills
+ * Search jobs by multiple skills with salary insights
+ */
+app.get('/api/jobs/adzuna/skills', authenticateToken, async (req, res) => {
+    try {
+        const { skills = '', location = 'US' } = req.query;
+
+        if (!skills) {
+            return res.status(400).json({ error: 'Skills parameter required (comma-separated)' });
+        }
+
+        const skillList = skills.split(',').map(s => s.trim()).filter(s => s);
+        const results = await adzunaService.searchBySkills(skillList, location);
+
+        res.json({
+            success: true,
+            location,
+            ...results
+        });
+    } catch (error) {
+        console.error('[Adzuna Skills] Error:', error);
+        res.status(500).json({ error: 'Failed to search by skills' });
+    }
+});
+
+/**
+ * GET /api/jobs/adzuna/salary
+ * Get salary insights for a specific role
+ */
+app.get('/api/jobs/adzuna/salary', authenticateToken, async (req, res) => {
+    try {
+        const { role = '', location = 'US' } = req.query;
+
+        if (!role) {
+            return res.status(400).json({ error: 'Role parameter required' });
+        }
+
+        const insights = await adzunaService.getSalaryInsights(role, location);
+
+        res.json({
+            success: true,
+            insights
+        });
+    } catch (error) {
+        console.error('[Adzuna Salary] Error:', error);
+        res.status(500).json({ error: 'Failed to fetch salary data' });
     }
 });
 

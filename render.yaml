@@ -4,10 +4,11 @@ services:
     runtime: node
     plan: free
     region: oregon
+    rootDir: backend
     
     # Build and start commands
-    buildCommand: cd backend && npm install
-    startCommand: cd backend && npm start
+    buildCommand: npm install
+    startCommand: npm start
     
     # Auto-start/stop for free tier
     autoDeploy: true
@@ -35,8 +36,9 @@ services:
 
   - type: static
     name: gradlaunch-frontend
-    staticPublishPath: frontend/dist
-    buildCommand: cd frontend && npm install && npm run build
+    rootDir: frontend
+    staticPublishPath: dist
+    buildCommand: npm install && npm run build
     routes:
       - path: /api/*
         destination: http://gradlaunch-backend:3001
