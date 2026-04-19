@@ -4,11 +4,10 @@ services:
     runtime: node
     plan: free
     region: oregon
-    rootDir: backend
     
-    # Build and start commands
-    buildCommand: npm install
-    startCommand: npm start
+    # Build and start commands (use cd instead of rootDir)
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && npm start
     
     # Auto-start/stop for free tier
     autoDeploy: true
@@ -32,6 +31,10 @@ services:
       - key: RAPIDAPI_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ADZUNA_APP_ID
+        sync: false
+      - key: ADZUNA_APP_KEY
         sync: false
 
   - type: static
