@@ -2,38 +2,35 @@ console.log('[Bootstrap] Starting GradLaunch server...');
 require('dotenv').config();
 console.log('[Bootstrap] Environment loaded');
 
-try {
-    const express = require('express');
-    const cors = require('cors');
-    const path = require('path');
-    const axios = require('axios');
-    const cheerio = require('cheerio');
-    const crypto = require('crypto');
-    const rateLimit = require('express-rate-limit');
-    const multer = require('multer');
-    console.log('[Bootstrap] Core modules loaded');
+// Core modules - these MUST load or server fails
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+const axios = require('axios');
+const cheerio = require('cheerio');
+const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
+const multer = require('multer');
+const http = require('http');
+const socketIo = require('socket.io');
+console.log('[Bootstrap] Core modules loaded');
 
-    const { parseResumePDF } = require('./parser');
-    const { syncApplicationStatus } = require('./syncService');
-    const { OAuth2Client } = require('google-auth-library');
-    const { initMailer, sendJobAlertEmail, sendInterviewReminderEmail } = require('./mailer');
-    const cron = require('node-cron');
-    console.log('[Bootstrap] Service modules loaded');
+// Service modules
+const { parseResumePDF } = require('./parser');
+const { syncApplicationStatus } = require('./syncService');
+const { OAuth2Client } = require('google-auth-library');
+const { initMailer, sendJobAlertEmail, sendInterviewReminderEmail } = require('./mailer');
+const cron = require('node-cron');
+console.log('[Bootstrap] Service modules loaded');
 
-    const { enrichJobWithVisaIntelligence } = require('./visaIntelligence');
-    const { calculateMatchScore } = require('./matchScore');
-    const { rateLimitMiddleware } = require('./rateLimiter');
-    const { detectATSType, dispatchApplication } = require('./hybridApply');
-    console.log('[Bootstrap] Intelligence modules loaded');
+// Intelligence modules
+const { enrichJobWithVisaIntelligence } = require('./visaIntelligence');
+const { calculateMatchScore } = require('./matchScore');
+const { rateLimitMiddleware } = require('./rateLimiter');
+const { detectATSType, dispatchApplication } = require('./hybridApply');
+console.log('[Bootstrap] Intelligence modules loaded');
 
-    const http = require('http');
-    const socketIo = require('socket.io');
-} catch (e) {
-    console.error('[Bootstrap] Failed to load core modules:', e.message);
-    process.exit(1);
-}
-
-// NEW: Intelligence Services
+// NEW: Intelligence Services - with error handling
 console.log('[Bootstrap] Initializing intelligence services...');
 let ResumeMatchingEngine, AIFormFiller, AnalyticsService, ABTestingService, AdzunaService, AgentOrchestrator, registerWeightExperiments, registerPromptExperiments;
 
@@ -49,19 +46,41 @@ try {
     console.log('[Bootstrap] Intelligence services loaded ✅');
 } catch (e) {
     console.error('[Bootstrap] Failed to load intelligence services:', e.message);
-    console.error('[Bootstrap] Stack trace:', e.stack);
-    process.exit(1);
+    console.error('[Bootstrap] Error details:', e);
+    // Don't exit - try to continue with degraded functionality
 }
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
-const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+let googleClient;
+try {
+    googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+    console.log('[Bootstrap] Google OAuth client initialized');
+} catch (e) {
+    console.warn('[Bootstrap] Warning: Google OAuth may not work:', e.message);
+}
+
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+console.log('[Bootstrap] API keys loaded');
 
 // Initialize Intelligence Services
-const matchingEngine = new ResumeMatchingEngine();
-const formFiller = new AIFormFiller();
-const adzunaService = new AdzunaService();
+console.log('[Bootstrap] Instantiating service instances...');
+let matchingEngine, formFiller, adzunaService;
+try {
+    if (!ResumeMatchingEngine) throw new Error('ResumeMatchingEngine not loaded');
+    if (!AIFormFiller) throw new Error('AIFormFiller not loaded');
+    if (!AdzunaService) throw new Error('AdzunaService not loaded');
+    
+    matchingEngine = new ResumeMatchingEngine();
+    formFiller = new AIFormFiller();
+    adzunaService = new AdzunaService();
+    console.log('[Bootstrap] Core service instances created ✅');
+} catch (e) {
+    console.error('[Bootstrap] Failed to instantiate services:', e.message);
+    console.error(e.stack);
+    process.exit(1);
+}
+
 let analyticsService;
 let abTestingService;
 
