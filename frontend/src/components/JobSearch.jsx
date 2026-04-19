@@ -1,15 +1,33 @@
 import React, { useState, useEffect } from "react";
 import { TagBadge, LogoCircle, MatchRing, SkeletonCard, EmptyState, TrustBadge, RecentlyPostedBadge, MatchChanceBadge } from "./Common";
-import { computeSemanticScores } from "../utils/matching";
+import JobIntelligenceCard from "./JobIntelligenceCard";
+import SmartApplyModal from "./SmartApplyModal";
+
+import ResumeVersionManager from "./ResumeVersionManager";
 
 export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, profileText, C }) {
     const [jobs, setJobs] = useState([]);
     const [loadingJobs, setLoadingJobs] = useState(false);
     const [search, setSearch] = useState("");
-    const [filters, setFilters] = useState({ newGrad: false, h1b: false, opt: false, remote: false, trustedOnly: false });
+    const [filters, setFilters] = useState({ 
+        newGrad: false, 
+        h1b_sponsor: false, 
+        stem_opt: false, 
+        cap_exempt: false, 
+        remote: false, 
+        trustedOnly: false 
+    });
+    const [error, setError] = useState(null);
+    const [modalError, setModalError] = useState(null);
     const [selectedJob, setSelectedJob] = useState(null);
     const [analysis, setAnalysis] = useState(null);
+    const [deepAnalysis, setDeepAnalysis] = useState(null);
     const [analyzing, setAnalyzing] = useState(false);
+    const [tailoring, setTailoring] = useState(false);
+    const [tailoredResume, setTailoredResume] = useState(null);
+    const [changesMade, setChangesMade] = useState([]);
+    const [showSmartApply, setShowSmartApply] = useState(false);
+    const [stage, setStage] = useState("ready"); // 'analyzing', 'tailoring', 'ready', 'dispatching'
     const [resolvedLink, setResolvedLink] = useState(null);
     const [showSavedOnly, setShowSavedOnly] = useState(false);
     const [retryCount, setRetryCount] = useState(0);
@@ -20,26 +38,50 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
     useEffect(() => {
         let retryTimer = null;
         async function fetchJobs(silent = false) {
-            if (!silent) setLoadingJobs(true);
+            if (!silent) {
+                setLoadingJobs(true);
+                setError(null);
+            }
             try {
                 const params = new URLSearchParams();
                 if (search) params.append("q", search);
                 if (filters.remote) params.append("remote", "true");
                 if (filters.newGrad) params.append("newGrad", "true");
                 if (filters.trustedOnly) params.append("trustedOnly", "true");
-                if (filters.opt) params.append("sponsorship", "true");
+                if (filters.h1b_sponsor) params.append("h1b_sponsor", "true");
+                if (filters.stem_opt) params.append("stem_opt", "true");
+                if (filters.cap_exempt) params.append("cap_exempt", "true");
+                if (profileText && profileText.toLowerCase() !== "add your resume or profile text here for ai matching...") {
+                    params.append("profileText", profileText);
+                }
 
-                const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/jobs?${params.toString()}`);
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+                const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/jobs?${params.toString()}`, { signal: controller.signal });
+                clearTimeout(timeoutId);
+
                 if (res.ok) {
                     const data = await res.json();
-                    setJobs(computeSemanticScores(profileText, data || []));
+                    setJobs(data || []);
                     setLastUpdated(new Date());
                     if (!data || data.length === 0) {
                         retryTimer = setTimeout(() => setRetryCount(c => c + 1), 10000);
                     }
+                } else {
+                    if (res.status === 429) {
+                        const data = await res.json();
+                        throw new Error(`Rate limited: ${data.message || data.error}`);
+                    }
+                    throw new Error(`Search failed: ${res.status}`);
                 }
             } catch (e) {
-                console.warn("Backend connection failed. Retrying...");
+                console.warn("Backend connection failed.", e);
+                if (e.name === 'AbortError') {
+                    if (!silent) setError('Request timed out. Please try again.');
+                } else {
+                    if (!silent) setError(e.message);
+                }
                 retryTimer = setTimeout(() => setRetryCount(c => c + 1), 15000);
             }
             if (!silent) setLoadingJobs(false);
@@ -47,7 +89,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
         const debounce = setTimeout(() => fetchJobs(false), 300);
         const autoRefresh = setInterval(() => fetchJobs(true), 10 * 60 * 1000);
         return () => { clearTimeout(debounce); clearInterval(autoRefresh); if (retryTimer) clearTimeout(retryTimer); };
-    }, [search, filters.remote, filters.newGrad, filters.trustedOnly, filters.opt, retryCount]);
+    }, [search, filters.remote, filters.newGrad, filters.trustedOnly, filters.h1b_sponsor, filters.stem_opt, filters.cap_exempt, retryCount]);
 
     useEffect(() => {
         setAnalysis(null);
@@ -63,29 +105,160 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
         }
     }, [selectedJob?.id]);
 
-    async function analyzeFit() {
+    const [streamState, setStreamState] = useState(null);
+
+    useEffect(() => {
+        setDeepAnalysis(null);
+        setTailoredResume(null);
+        setChangesMade([]);
+        setStreamState(null);
+    }, [selectedJob?.id]);
+
+    async function analyzeFitDeep() {
         if (!selectedJob) return;
         setAnalyzing(true);
+        setStage("analyzing");
+        setShowSmartApply(true); // Open modal early to show progress
+        setModalError(null);
+        setStreamState({ state: 'INIT', message: 'Connecting to agent orchestrator...' });
+        
         try {
             const token = localStorage.getItem("token");
-            const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/ai/match`, {
+            const qs = new URLSearchParams({
+                title: selectedJob.title || '',
+                company: selectedJob.company || '',
+                id: selectedJob.id || '',
+                link: selectedJob.link || '',
+                description: selectedJob.description || ''
+            });
+
+            const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/ai/analyze-stream?${qs.toString()}`, {
+                method: "GET",
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+
+            if (!res.ok) {
+                throw new Error(`Analysis failed: ${res.status}`);
+            }
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+            let done = false;
+            let buffer = "";
+
+            while (!done) {
+                const { value, done: readerDone } = await reader.read();
+                done = readerDone;
+                if (value) {
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop(); // keep remainder
+                    
+                    let currentEvent = null;
+                    for (const line of lines) {
+                        if (line.startsWith('event: ')) {
+                            currentEvent = line.replace('event: ', '').trim();
+                        } else if (line.startsWith('data: ')) {
+                            const dataStr = line.replace('data: ', '').trim();
+                            try {
+                                const parsed = JSON.parse(dataStr);
+                                if (currentEvent === 'step') {
+                                    setStreamState(parsed);
+                                    if (parsed.state === 'READY') {
+                                        setDeepAnalysis(parsed.data);
+                                    } else if (parsed.state === 'ERROR') {
+                                        throw new Error(parsed.error);
+                                    }
+                                } else if (currentEvent === 'done') {
+                                    // Complete
+                                    setAnalyzing(false);
+                                    setStage("tailoring");
+                                    // Wait for state to settle then tailor
+                                    setTimeout(() => handleTailor(), 100);
+                                } else if (currentEvent === 'error') {
+                                    throw new Error(parsed.error);
+                                }
+                            } catch (e) {
+                                // likely incomplete JSON chunk, wait for next buffer (shouldn't happen with split('\n'))
+                                if(line.includes("error")) throw new Error("JSON parse error on SSE stream.");
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Deep analysis streaming failed", e);
+            setModalError(e.message || "Failed to analyze job stream.");
+            setStage("failed");
+            setAnalyzing(false);
+        }
+    }
+
+    async function handleTailor(analysisData) {
+        if (!selectedJob) return;
+        setTailoring(true);
+        setStage("tailoring");
+        setModalError(null);
+        try {
+            const token = localStorage.getItem("token");
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+            const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/ai/tailor-resume`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
                 body: JSON.stringify({
-                    resume: profileText || "New Grad Software Engineer with React and Node.js experience.",
-                    jobDescription: selectedJob.description
+                    jobId: selectedJob.id,
+                    resumeText: profileText || "New Grad Software Engineer"
+                }),
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            if (!res.ok) throw new Error(`Material generation failed: ${res.status}`);
+
+            const data = await res.json();
+            setTailoredResume(data.tailoredResume);
+            setChangesMade(data.changesMade || []);
+            setStage("ready");
+        } catch (e) {
+            console.error("Tailoring failed", e);
+            setModalError(e.name === 'AbortError' ? 'Generation timed out after 30 seconds' : e.message);
+            setStage("failed");
+        }
+        setTailoring(false);
+    }
+
+    async function handleFinalDispatch() {
+        setStage("dispatching");
+        setModalError(null);
+        try {
+            const token = localStorage.getItem("token");
+            const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/jobs/dispatch`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                body: JSON.stringify({ 
+                    jobId: selectedJob.id,
+                    tier: deepAnalysis?.ats_type === 'greenhouse' || deepAnalysis?.ats_type === 'lever' ? 3 : (deepAnalysis?.ats_type === 'workday' ? 2 : 1),
+                    resumeId: "master" // Default for now
                 })
             });
-            const data = await res.json();
-            setAnalysis({
-                score: data.score || selectedJob.match,
-                readinessScore: data.readinessScore || 70,
-                missingSkills: data.missingSkills || [],
-                suggestions: data.suggestions || [],
-                whyFit: data.whyFit || ["Matches your core stack."]
-            });
-        } catch (e) { setAnalysis({ score: selectedJob.match, whyFit: ["Could not connect to AI."] }); }
-        setAnalyzing(false);
+            if (res.ok) {
+                const result = await res.json();
+                onAddToTracker({ ...selectedJob, stage: result.status === 'submitted' ? 'Submitted' : 'Pending' });
+                setShowSmartApply(false);
+                setSelectedJob(null);
+                setStage("ready");
+                alert(result.status === 'submitted' ? "Application submitted via Auto-Dispatch! 🚀" : "Application materials prepared for Smart-Assist! 🪄");
+            } else {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error || 'Submission failed');
+            }
+        } catch (e) { 
+            console.error("Dispatch failed", e);
+            setModalError(e.message || "Dispatch failed.");
+            setStage("failed");
+        }
     }
 
     const baseJobs = showSavedOnly ? savedJobs : jobs;
@@ -109,7 +282,6 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                         ["newGrad", "🎓 New Grad"],
                         ["opt", "📋 OPT Friendly"],
                         ["trustedOnly", "✅ Direct Apply"],
-                        ["remote", "🏠 Remote"],
                     ].map(([key, label]) => (
                         <button
                             key={key}
@@ -119,6 +291,30 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                             {label}
                         </button>
                     ))}
+                    <button
+                        onClick={() => setFilters(prev => ({ ...prev, h1b_sponsor: !prev.h1b_sponsor }))}
+                        className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${filters.h1b_sponsor ? "bg-primary/20 border-primary text-primary" : "bg-surface/50 border-border/50 text-white/50 hover:text-white"}`}
+                    >
+                        🛂 H1B Sponsor
+                    </button>
+                    <button
+                        onClick={() => setFilters(prev => ({ ...prev, stem_opt: !prev.stem_opt }))}
+                        className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${filters.stem_opt ? "bg-green-500/20 border-green-500 text-green-400" : "bg-surface/50 border-border/50 text-white/50 hover:text-white"}`}
+                    >
+                        🎓 STEM OPT
+                    </button>
+                    <button
+                        onClick={() => setFilters(prev => ({ ...prev, cap_exempt: !prev.cap_exempt }))}
+                        className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${filters.cap_exempt ? "bg-amber-500/20 border-amber-500 text-amber-400" : "bg-surface/50 border-border/50 text-white/50 hover:text-white"}`}
+                    >
+                        ⚡ Cap-Exempt
+                    </button>
+                    <button
+                        onClick={() => setFilters(prev => ({ ...prev, remote: !prev.remote }))}
+                        className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${filters.remote ? "bg-primary/20 border-primary text-primary shadow-lg shadow-primary/20" : "bg-surface/50 border-border/50 text-white/50 hover:text-white"}`}
+                    >
+                        Remote Only
+                    </button>
                     <button
                         onClick={() => setShowSavedOnly(!showSavedOnly)}
                         className={`px-4 py-2 rounded-xl text-xs font-bold border ml-auto transition-all ${showSavedOnly ? 'bg-purple/20 border-purple text-purple' : 'bg-card border-border text-muted'}`}
@@ -134,6 +330,13 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                 {loadingJobs ? (
                     <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
                         {[1, 2, 3, 4, 5, 6].map(i => <SkeletonCard key={i} />)}
+                    </div>
+                ) : error ? (
+                    <div className="bg-pink/10 border border-pink/30 rounded-[2rem] p-10 flex flex-col items-center justify-center text-center max-w-lg mx-auto mt-10">
+                        <div className="text-4xl mb-4">⚠️</div>
+                        <h3 className="text-xl font-black font-syne uppercase tracking-tight text-white mb-2">Something went wrong</h3>
+                        <p className="text-pink mb-6 font-medium italic">{error}</p>
+                        <button onClick={() => setRetryCount(c => c + 1)} className="px-8 py-4 bg-pink text-black font-black uppercase tracking-widest text-xs rounded-2xl hover:bg-white transition-all shadow-lg shadow-pink/20">Try Again</button>
                     </div>
                 ) : filtered.length === 0 ? (
                     <EmptyState icon="🔍" title="No results found" description="Try broadening your search or clearing filters." />
@@ -235,7 +438,29 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-8 space-y-10 custom-scrollbar pb-32">
-                        {/* 🎯 Decision Panel */}
+                        {/* 🧠 Intelligence Injection */}
+                        {!deepAnalysis ? (
+                            <button 
+                                onClick={analyzeFitDeep}
+                                disabled={analyzing}
+                                className="w-full bg-accent/10 border border-accent/20 rounded-[2.5rem] p-10 group hover:bg-accent/20 transition-all active:scale-[0.99]"
+                            >
+                                <div className="text-4xl mb-4 group-hover:scale-125 transition-transform duration-500 origin-center">🧠</div>
+                                <h3 className="text-[10px] font-black text-accent uppercase tracking-[0.4em] mb-2">Initialize Deep Intelligence</h3>
+                                <p className="text-[11px] text-muted italic font-medium">Map keyword gaps, match scores, and sponsorship intel...</p>
+                                {analyzing && <div className="mt-6 h-1 w-full bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-accent animate-shimmer w-1/2" /></div>}
+                            </button>
+                        ) : (
+                            <JobIntelligenceCard 
+                                analysis={deepAnalysis} 
+                                onTailor={handleTailor}
+                                onApply={() => setShowSmartApply(true)}
+                                loadingTailor={tailoring}
+                                onStartAutoFix={() => { setStage('fixing'); setShowSmartApply(true); }}
+                            />
+                        )}
+
+                        {/* 🎯 Decision Panel (Legacy/Simpler mode) */}
                         <div className="bg-card/50 border border-border p-8 rounded-[3rem] relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-40 h-40 bg-accent/5 blur-3xl rounded-full -mr-20 -mt-20" />
                             <div className="flex flex-col md:flex-row items-center gap-8 relative z-10">
@@ -307,6 +532,15 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                                 {selectedJob.description}
                             </div>
                         </section>
+
+                        {/* Resume Version Repository */}
+                        <section className="pt-8 border-t border-white/5">
+                            <ResumeVersionManager onSelect={(v) => {
+                                setTailoredResume(v.content);
+                                setChangesMade(["Loaded from repository"]);
+                                setShowSmartApply(true);
+                            }} />
+                        </section>
                     </div>
 
                     {/* ✨ Sticky Action Footer */}
@@ -335,6 +569,26 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                         </button>
                     </div>
                 </div>
+            )}
+            {/* Smart Apply Modal Overlay */}
+            {showSmartApply && (
+                <SmartApplyModal 
+                    job={selectedJob} 
+                    tailoredResume={tailoredResume}
+                    changesMade={changesMade}
+                    analysis={deepAnalysis}
+                    streamState={streamState}
+                    stage={stage}
+                    error={modalError}
+                    onRetry={() => {
+                        // Resumes from where it failed roughly
+                        if (!deepAnalysis) analyzeFitDeep();
+                        else if (!tailoredResume) handleTailor(deepAnalysis);
+                        else handleFinalDispatch();
+                    }}
+                    onApprove={handleFinalDispatch}
+                    onCancel={() => setShowSmartApply(false)}
+                />
             )}
         </div>
     );

@@ -11,6 +11,7 @@ import { GoogleLogin } from "@react-oauth/google";
 import Onboarding from "./components/Onboarding";
 import JobView from "./components/JobView";
 import LandingPage from "./components/LandingPage";
+const AIFormFiller = React.lazy(() => import("./components/AIFormFiller"));
 
 // ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
 function AuthScreen({ onLogin }) {
@@ -270,6 +271,7 @@ function GradLaunchContent() {
     { id: "copilot", label: "Copilot", icon: "🤖", path: "/copilot" },
     { id: "resume", label: "Optimizer", icon: "🪄", path: "/resume" },
     { id: "tracker", label: "Pipeline", icon: "📋", path: "/tracker" },
+    { id: "ai-form", label: "Autofill", icon: "🪄", path: "/ai-form" },
     { id: "profile", label: "Identity", icon: "👤", path: "/profile" },
   ];
 
@@ -348,6 +350,11 @@ function GradLaunchContent() {
               <Route path="/copilot" element={<Copilot />} />
               <Route path="/resume" element={<ResumeTailor initialJobDesc={prefilledJob.description} jobUrl={prefilledJob.link} globalContext={globalProfileContext} />} />
               <Route path="/tracker" element={<AppTracker applications={applications} setApplications={setApplications} />} />
+              <Route path="/ai-form" element={
+                <React.Suspense fallback={<div className="h-screen bg-background flex items-center justify-center text-accent">Loading AI Assistant...</div>}>
+                  <AIFormFiller />
+                </React.Suspense>
+              } />
               <Route path="/profile" element={<Profile globalContext={globalProfileContext} setGlobalContext={setGlobalProfileContext} setGlobalVector={setProfileText} currentUser={currentUser} onProfileUpdate={(p) => { if (p.name) setCurrentUser(prev => ({ ...prev, name: p.name })); showToast("Profile Authenticated!"); }} />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

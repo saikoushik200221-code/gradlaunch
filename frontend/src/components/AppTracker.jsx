@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
+// import { io } from "socket.io-client"; // Disabled temporarily due to local npm block
 import { LogoCircle, EmptyState, TrustBadge, AssistantBubble } from "./Common";
 
 const TRACKER_STAGES = ["Wishlist", "Applied", "Phone Screen", "Interview", "Offer 🎉", "Rejected"];
@@ -107,6 +108,37 @@ const SuccessPattern = ({ label, value, trend }) => (
 export default function AppTracker({ applications, setApplications }) {
     const [selectedAppId, setSelectedAppId] = useState(null);
     const selectedApp = applications.find(a => a.id === selectedAppId);
+
+    const socketRef = useRef(null);
+    
+    useEffect(() => {
+        /*
+        // Connect to WebSocket for real-time updates (Disabled temporarily)
+        const socketUrl = import.meta.env.VITE_WS_URL || import.meta.env.VITE_API_URL || "http://localhost:3001";
+        try {
+            socketRef.current = io(socketUrl, {
+                path: '/socket.io',
+                transports: ['websocket']
+            });
+            
+            socketRef.current.on('application_update', (updatedApp) => {
+                setApplications(prev => prev.map(app => 
+                    app.id === updatedApp.id ? updatedApp : app
+                ));
+            });
+            
+            socketRef.current.on('new_application', (newApp) => {
+                setApplications(prev => [newApp, ...prev]);
+            });
+        } catch (e) {
+            console.warn("Socket.io not loaded");
+        }
+        
+        return () => {
+            if (socketRef.current) socketRef.current.disconnect();
+        };
+        */
+    }, [setApplications]);
 
     const updateApp = async (id, updates) => {
         const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";

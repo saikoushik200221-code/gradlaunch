@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { StatCard, MatchChanceBadge, AssistantBubble, LogoCircle } from "./Common";
+import { MatchChanceBadge, AssistantBubble, LogoCircle } from "./Common";
 import { useNavigate } from "react-router-dom";
 
 const DashboardStat = ({ title, value, growth, icon, colorClass }) => (
@@ -20,19 +20,32 @@ const DashboardStat = ({ title, value, growth, icon, colorClass }) => (
     </div>
 );
 
-const JobCompactRow = ({ job, onClick }) => (
+const JobCompactRow = ({ job, onClick, index }) => (
     <div 
         onClick={onClick}
-        className="bg-card/40 border border-border/50 rounded-2xl p-5 flex items-center gap-6 cursor-pointer hover:bg-surface hover:border-accent/30 transition-all group"
+        className="bg-card/40 border border-border/50 rounded-2xl p-5 flex items-center gap-6 cursor-pointer hover:bg-surface hover:border-accent/30 transition-all group relative"
     >
+        {index !== undefined && (
+            <div className="absolute -left-3 -top-3 w-8 h-8 rounded-full bg-surface border border-accent/30 flex items-center justify-center text-[10px] font-black text-accent">{index + 1}</div>
+        )}
         <LogoCircle letter={job.company?.[0]} logoUrl={job.logo} size={48} />
         <div className="flex-1 min-w-0">
             <div className="text-sm font-bold text-white truncate uppercase tracking-tight group-hover:text-accent transition-colors">{job.title}</div>
             <div className="text-[10px] text-muted font-black uppercase tracking-widest">{job.company}</div>
         </div>
+        
+        {job.label && (
+            <div className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border ${
+                job.label.includes("HIGH") ? "bg-accent/10 border-accent/20 text-accent" : 
+                job.label.includes("MEDIUM") ? "bg-purple-500/10 border-purple-500/20 text-purple-400" : 
+                "bg-white/5 border-white/10 text-muted"
+            }`}>
+                {job.label}
+            </div>
+        )}
+
         <div className="flex flex-col items-end gap-1">
-            <div className="text-sm font-black text-accent">{job.match_score || 85}% Match</div>
-            <MatchChanceBadge score={job.match_score || 85} />
+            <div className="text-sm font-black text-accent">{job.match_score || job.match || 85}% Match</div>
         </div>
         <div className="bg-accent text-black px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all">
             Apply →
@@ -57,16 +70,19 @@ export default function Dashboard({ savedJobs, profileText, currentUser }) {
             } catch (e) { console.error("Analytics fetch failed", e); }
             setLoading(false);
         }
-        async function fetchCurated() {
+        async function fetchRecommended() {
             try {
-                const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/jobs/curated`, {
+                const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/jobs/recommended`, {
                     headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
                 });
-                if (res.ok) setCuratedJobs(await res.json());
-            } catch (e) { console.error("Curated fetch failed", e); }
+                if (res.ok) {
+                    const d = await res.json();
+                    setCuratedJobs(d.dailyJobs || []);
+                }
+            } catch (e) { console.error("Recommended fetch failed", e); }
             setLoadingCurated(false);
         }
-        fetchAnalytics(); fetchCurated();
+        fetchAnalytics(); fetchRecommended();
     }, []);
 
     const s = data?.summary || { total: 0, offers: 0, interviews: 0, rejections: 0, successRate: 0, avgMatchScore: 78 };
@@ -126,20 +142,35 @@ export default function Dashboard({ savedJobs, profileText, currentUser }) {
                         <DashboardStat title="Match Score" value={`${s.avgMatchScore || 0}%`} growth="4" icon="📈" colorClass="accent" />
                     </div>
 
-                    {/* Assistant Insight */}
+                    {/* Assistant Insight (Decision Engine) */}
                     <AssistantBubble 
-                        message="Insight: You get 2x more responses from Startups than Big MNCs today. Priority alignment: Scale-ups."
-                        actionLabel="View Startup Jobs"
+                        message={s.total < 5 ? 
+                            "Intelligence Engine Warm-up: Apply to 5 more 'HIGH Confidence' roles to unlock personalized rejection analysis." : 
+                            "Strategy Shift Detected: Your conversion on Lever/Greenhouse roles is 3x higher than Workday. Prioritize Direct-API targets."}
+                        actionLabel="View High Match Roles"
                         onAction={() => navigate('/jobs')}
                     />
+
+                    {/* Tactical Gaps Dashboard */}
+                    <div className="bg-pink-500/5 border border-pink-500/10 rounded-[2.5rem] p-10 space-y-6">
+                        <h4 className="text-[10px] font-black text-pink-400 uppercase tracking-[0.4em]">Critical Strategy Gaps</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="flex items-center gap-3 text-xs font-bold text-white/70 italic">
+                                <span className="text-pink-400">⚠️</span> Missing "Kubernetes" in 4 target descriptions
+                            </div>
+                            <div className="flex items-center gap-3 text-xs font-bold text-white/70 italic">
+                                <span className="text-pink-400">⚠️</span> Resume v1 lacks "Scalability" metrics
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Right Column: Top Jobs Today */}
                 <div className="lg:col-span-12 xl:col-span-5 bg-surface/50 border border-border/50 rounded-[2.5rem] p-10 backdrop-blur-xl flex flex-col min-h-[500px]">
                     <div className="flex justify-between items-center mb-8">
                         <div className="space-y-1">
-                            <h3 className="font-syne text-xl font-black text-white uppercase tracking-tighter">🔥 Top Jobs Today</h3>
-                            <p className="text-[10px] font-black text-muted uppercase tracking-widest italic">Personalized Alignment</p>
+                            <h3 className="font-syne text-xl font-black text-white uppercase tracking-tighter">🔥 Today's Best Matches</h3>
+                            <p className="text-[10px] font-black text-muted uppercase tracking-widest italic">Apply in this order based on algorithm.</p>
                         </div>
                         <button onClick={() => navigate('/jobs')} className="text-[10px] font-black text-accent hover:underline uppercase tracking-widest">Explore All</button>
                     </div>
@@ -148,7 +179,7 @@ export default function Dashboard({ savedJobs, profileText, currentUser }) {
                         {loadingCurated ? (
                             [1,2,3,4,5].map(i => <div key={i} className="h-20 bg-card/40 rounded-2xl animate-pulse" />)
                         ) : curatedJobs.length > 0 ? (
-                            curatedJobs.slice(0, 5).map(j => <JobCompactRow key={j.id} job={j} onClick={() => navigate('/jobs')} />)
+                            curatedJobs.slice(0, 5).map((j, i) => <JobCompactRow key={j.id} job={j} index={i} onClick={() => navigate('/jobs')} />)
                         ) : (
                             <div className="flex-1 flex flex-col items-center justify-center text-center p-8 grayscale opacity-40 italic">
                                 <span className="text-4xl mb-4">🌑</span>
