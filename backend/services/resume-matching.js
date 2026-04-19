@@ -1,5 +1,20 @@
 const mammoth = require('mammoth');
-const pdfParse = require('pdf-parse');
+let pdfParse = null;
+
+// Lazy-load pdfParse only when needed 
+async function getPDFParser() {
+  if (!pdfParse) {
+    try {
+      pdfParse = require('pdf-parse');
+      console.log('[ResumeMatching] pdf-parse loaded');
+    } catch (e) {
+      console.warn('[ResumeMatching] pdf-parse not available, PDF parsing disabled');
+      return null;
+    }
+  }
+  return pdfParse;
+}
+
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // Initialize Gemini AI if API key exists
@@ -38,21 +53,20 @@ class ResumeMatchingEngine {
   async parseResume(buffer, mimetype) {
     try {
       let text = '';
-      
+
       if (mimetype === 'application/pdf') {
-        const data = await pdfParse(buffer);
-        text = data.text;
-        console.log('[ResumeMatching] Parsed PDF:', (text || '').length, 'characters');
-      } 
-      else if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-        const result = await mammoth.extractRawText({ buffer });
+        const pdfParser = await getPDFParser();
+        if (!pdfParser) {
+          throw new Error('PDF parsing library not available');
+        }
+        const data = await pdfParser(buffer);
         text = result.value;
         console.log('[ResumeMatching] Parsed DOCX:', (text || '').length, 'characters');
       }
       else {
         throw new Error(`Unsupported file type: ${mimetype}`);
       }
-      
+
       return text;
     } catch (error) {
       console.error('[ResumeMatching] Parse error:', error);
@@ -80,7 +94,7 @@ class ResumeMatchingEngine {
         return this.extractWithMock(text);
       }
     }
-    
+
     // Fallback to mock extraction
     return this.extractWithMock(text);
   }
@@ -90,7 +104,7 @@ class ResumeMatchingEngine {
    */
   async extractWithGemini(text) {
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }); // Use flash for speed
-    
+
     const prompt = `
       Extract structured information from this resume. Return ONLY a JSON object with this exact structure:
       {
@@ -120,17 +134,17 @@ class ResumeMatchingEngine {
       Resume text:
       ${text.substring(0, 15000)}
     `;
-    
+
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const jsonText = response.text();
-    
+
     // Extract JSON from response
     const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       return JSON.parse(jsonMatch[0]);
     }
-    
+
     throw new Error('Failed to parse Gemini response');
   }
 
@@ -139,29 +153,29 @@ class ResumeMatchingEngine {
    */
   extractWithMock(text) {
     const lowerText = text.toLowerCase();
-    
+
     // Extract skills (common tech skills)
     const commonSkills = [
       'javascript', 'python', 'java', 'react', 'node.js', 'sql', 'aws',
       'docker', 'kubernetes', 'typescript', 'html', 'css', 'mongodb',
       'express', 'django', 'flask', 'vue', 'angular', 'git', 'agile'
     ];
-    
+
     const skills = commonSkills.filter(skill => lowerText.includes(skill));
-    
+
     // Extract years of experience
     let years = 0;
     const yearMatches = lowerText.match(/(\d+)\s*years?\s+experience/i);
     if (yearMatches) {
       years = parseInt(yearMatches[1]);
     }
-    
+
     // Determine industry
     let industry = 'Technology';
     if (lowerText.includes('finance') || lowerText.includes('bank')) industry = 'Finance';
     else if (lowerText.includes('healthcare') || lowerText.includes('medical')) industry = 'Healthcare';
     else if (lowerText.includes('marketing') || lowerText.includes('sales')) industry = 'Marketing';
-    
+
     return {
       skills: skills.length ? skills : ['Communication', 'Problem Solving'],
       experience: {
@@ -171,8 +185,8 @@ class ResumeMatchingEngine {
         highlights: ['Demonstrated strong technical skills']
       },
       education: {
-        degree: lowerText.includes('bachelor') ? "Bachelor's" : 
-                lowerText.includes('master') ? "Master's" : "Degree",
+        degree: lowerText.includes('bachelor') ? "Bachelor's" :
+          lowerText.includes('master') ? "Master's" : "Degree",
         field: lowerText.includes('computer') ? 'Computer Science' : 'Related Field',
         institution: 'University',
         graduation_year: 2020
@@ -202,7 +216,7 @@ class ResumeMatchingEngine {
       location: this.calculateLocationScore(resumeData.location || {}, jobData),
       industry: this.calculateIndustryScore(resumeData.industry || '', jobData)
     };
-    
+
     const total = (
       scores.skills * MATCH_WEIGHTS.skills +
       scores.experience * MATCH_WEIGHTS.experience +
@@ -210,7 +224,7 @@ class ResumeMatchingEngine {
       scores.location * MATCH_WEIGHTS.location +
       scores.industry * MATCH_WEIGHTS.industry
     );
-    
+
     return {
       total: Math.round(total * 100),
       breakdown: scores,
@@ -226,16 +240,16 @@ class ResumeMatchingEngine {
   calculateSkillsScore(resumeSkills, jobSkills) {
     if (!jobSkills || jobSkills.length === 0) return 1.0;
     if (!resumeSkills || resumeSkills.length === 0) return 0.0;
-    
+
     const normalizedResume = resumeSkills.map(s => String(s).toLowerCase().trim());
     const normalizedJob = jobSkills.map(s => String(s).toLowerCase().trim());
-    
-    const matches = normalizedJob.filter(skill => 
-      normalizedResume.some(resumeSkill => 
+
+    const matches = normalizedJob.filter(skill =>
+      normalizedResume.some(resumeSkill =>
         resumeSkill.includes(skill) || skill.includes(resumeSkill)
       )
     );
-    
+
     return matches.length / normalizedJob.length;
   }
 
@@ -245,10 +259,10 @@ class ResumeMatchingEngine {
   calculateExperienceScore(resumeExp, jobData) {
     const requiredYears = jobData.experience_min || 0;
     const resumeYears = resumeExp.years || 0;
-    
+
     if (requiredYears === 0) return 1.0;
     if (resumeYears >= requiredYears) return 1.0;
-    
+
     return resumeYears / requiredYears;
   }
 
@@ -264,13 +278,13 @@ class ResumeMatchingEngine {
       'phd': 5,
       'doctorate': 5
     };
-    
+
     const requiredLevel = (jobData.education_level || "bachelor's").toLowerCase();
     const resumeLevel = (resumeEdu.degree || "bachelor's").toLowerCase();
-    
+
     const requiredScore = educationLevels[requiredLevel] || 3;
     const resumeScore = educationLevels[resumeLevel] || 3;
-    
+
     return Math.min(1.0, resumeScore / requiredScore);
   }
 
@@ -280,14 +294,14 @@ class ResumeMatchingEngine {
   calculateLocationScore(resumeLoc, jobData) {
     if (jobData.location?.toLowerCase().includes('remote')) return 1.0;
     if (resumeLoc.remote_preference) return 0.8;
-    
+
     const jobLoc = (jobData.location || "").toLowerCase();
     const resumeCity = (resumeLoc.city || "").toLowerCase();
     const resumeState = (resumeLoc.state || "").toLowerCase();
-    
+
     if (resumeCity && jobLoc.includes(resumeCity)) return 1.0;
     if (resumeState && jobLoc.includes(resumeState)) return 0.8;
-    
+
     return 0.3;
   }
 
@@ -297,15 +311,15 @@ class ResumeMatchingEngine {
   calculateIndustryScore(resumeIndustry, jobData) {
     const jobIndustry = jobData.industry || jobData.company_type;
     if (!jobIndustry) return 0.5;
-    
+
     const normalizedResume = (resumeIndustry || "").toLowerCase();
     const normalizedJob = jobIndustry.toLowerCase();
-    
+
     if (normalizedResume === normalizedJob) return 1.0;
     if (normalizedResume.includes(normalizedJob) || normalizedJob.includes(normalizedResume)) {
       return 0.8;
     }
-    
+
     return 0.4;
   }
 
@@ -314,10 +328,10 @@ class ResumeMatchingEngine {
    */
   async getWeightsForUser(userId, abTestingService) {
     if (!abTestingService) return MATCH_WEIGHTS;
-    
+
     try {
       const variant = await abTestingService.getVariantConfig(userId, 'weight_config_skill_vs_experience');
-      
+
       if (variant && variant.config) {
         await abTestingService.trackEvent(userId, 'weight_config_skill_vs_experience', 'weight_assigned', {
           variant: variant.name,
@@ -328,7 +342,7 @@ class ResumeMatchingEngine {
     } catch (error) {
       console.error('[Matching] Failed to get experiment weights:', error);
     }
-    
+
     return MATCH_WEIGHTS;
   }
 
@@ -337,7 +351,7 @@ class ResumeMatchingEngine {
    */
   async calculateWeightedScoreWithExperiment(resumeData, jobData, userId, abTestingService) {
     const weights = await this.getWeightsForUser(userId, abTestingService);
-    
+
     const scores = {
       skills: this.calculateSkillsScore(resumeData.skills || [], jobData.skills || []),
       experience: this.calculateExperienceScore(resumeData.experience || {}, jobData),
@@ -345,7 +359,7 @@ class ResumeMatchingEngine {
       location: this.calculateLocationScore(resumeData.location || {}, jobData),
       industry: this.calculateIndustryScore(resumeData.industry || '', jobData)
     };
-    
+
     const total = (
       scores.skills * weights.skills +
       scores.experience * weights.experience +
@@ -353,7 +367,7 @@ class ResumeMatchingEngine {
       scores.location * weights.location +
       scores.industry * weights.industry
     );
-    
+
     // Track score breakdown for analysis if service provided
     if (abTestingService) {
       await abTestingService.trackEvent(userId, 'weight_config_skill_vs_experience', 'match_calculated', {
@@ -362,7 +376,7 @@ class ResumeMatchingEngine {
         total
       });
     }
-    
+
     return {
       total: Math.round(total * 100),
       breakdown: scores,
@@ -383,15 +397,15 @@ class ResumeMatchingEngine {
    */
   async findMatchingJobs(userId, jobs, resumeData, limit = 10, abTestingService = null) {
     if (!jobs || !jobs.length) return [];
-    
+
     const matches = await Promise.all(jobs.map(async (job) => ({
       job,
       match: await this.calculateWeightedScoreWithExperiment(resumeData, job, userId, abTestingService)
     })));
-    
+
     // Sort by total score descending
     matches.sort((a, b) => b.match.total - a.match.total);
-    
+
     return matches.slice(0, limit).map(match => ({
       ...match.job,
       match_score: match.match.total,

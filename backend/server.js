@@ -16,7 +16,6 @@ const socketIo = require('socket.io');
 console.log('[Bootstrap] Core modules loaded');
 
 // Service modules
-const { parseResumePDF } = require('./parser');
 const { syncApplicationStatus } = require('./syncService');
 const { OAuth2Client } = require('google-auth-library');
 const { initMailer, sendJobAlertEmail, sendInterviewReminderEmail } = require('./mailer');
@@ -32,9 +31,10 @@ console.log('[Bootstrap] Intelligence modules loaded');
 
 // NEW: Intelligence Services - with error handling
 console.log('[Bootstrap] Initializing intelligence services...');
-let ResumeMatchingEngine, AIFormFiller, AnalyticsService, ABTestingService, AdzunaService, AgentOrchestrator, registerWeightExperiments, registerPromptExperiments;
+let ResumeMatchingEngine, AIFormFiller, AnalyticsService, ABTestingService, AdzunaService, AgentOrchestrator, registerWeightExperiments, registerPromptExperiments, parseResumePDF;
 
 try {
+    ({ parseResumePDF } = require('./parser'));
     ({ ResumeMatchingEngine } = require('./services/resume-matching'));
     ({ AIFormFiller } = require('./services/ai-form-filler'));
     ({ AnalyticsService } = require('./services/analytics'));
