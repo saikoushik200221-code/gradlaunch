@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: gradlaunch-backend
+    runtime: node
+    plan: free
+    region: oregon
+    
+    # Build and start commands
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && npm start
+    
+    # Auto-start/stop for free tier
+    autoDeploy: true
+    
+    # Environment variables (configure in Render dashboard)
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
+      - key: JWT_SECRET
+        value: gradlaunch_secret_key_2026
+      - key: CAREERJET_AFFID
+        value: 06d16a71140a5ce5834db87bfd2844ac
+      - key: RAPIDAPI_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+  - type: static
+    name: gradlaunch-frontend
+    staticPublishPath: frontend/dist
+    buildCommand: cd frontend && npm install && npm run build
+    routes:
+      - path: /api/*
+        destination: http://gradlaunch-backend:3001

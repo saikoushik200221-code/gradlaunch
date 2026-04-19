@@ -119,7 +119,17 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { er
 const jobsLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, message: { error: 'Too many job requests' } });
 const aiLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, message: { error: 'AI limit reached' } });
 
-app.use(cors());
+// Configure CORS for production and development
+const corsOptions = {
+    origin: process.env.NODE_ENV === 'production'
+        ? ['https://gradlaunch.vercel.app', 'https://www.gradlaunch.vercel.app']
+        : ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../frontend/dist'), { index: false }));
 
@@ -1408,7 +1418,7 @@ app.post('/api/user/preferences', authenticateToken, async (req, res) => {
         // Construct context object based on what was passed
         let ctxData = typeof context === 'string' ? { skill: context } : { ...context };
         if (proficiency) ctxData.proficiency = proficiency;
-        
+
         await db.run(
             'INSERT INTO user_preferences (user_id, preference_type, context) VALUES (?,?,?)',
             [req.user.id, type || 'general', JSON.stringify(ctxData)]

@@ -1,17 +1,26 @@
 {
-  "name": "backend",
+  "name": "gradlaunch-backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "GradLaunch Backend - AI Resume Analyzer Engine",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": [
+    "resume",
+    "analyzer",
+    "ai",
+    "ats"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": "18.x",
+    "npm": "9.x"
+  },
   "dependencies": {
     "@21st-sdk/agent": "latest",
     "@google/generative-ai": "^0.24.1",

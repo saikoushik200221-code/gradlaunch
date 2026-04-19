@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: gradlaunch-backend
+    env: node
+    region: oregon
+    plan: free
+    
+    # Build command - installs dependencies
+    buildCommand: npm install
+    
+    # Start command - runs your server
+    startCommand: npm start
+    
+    # Port your app runs on
+    envVars:
+      - key: PORT
+        value: 3001
+      - key: NODE_ENV
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false  # Set this in Render dashboard
+      - key: TURSO_DATABASE_URL
+        sync: false  # Set this in Render dashboard
+      - key: TURSO_AUTH_TOKEN
+        sync: false  # Set this in Render dashboard
+      - key: JWT_SECRET
+        value: gradlaunch_secret_key_2026
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CAREERJET_AFFID
+        value: 06d16a71140a5ce5834db87bfd2844ac
+      - key: RAPIDAPI_KEY
+        sync: false  # Set this in Render dashboard
+      - key: USAJOBS_EMAIL
+        sync: false
+      - key: USAJOBS_KEY
+        sync: false
