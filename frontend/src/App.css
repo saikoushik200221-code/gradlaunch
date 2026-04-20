@@ -1,42 +1,255 @@
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  text-align: left;
 }
+
+/* ──────── MODERN ANIMATIONS ──────────── */
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes floatCard {
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes rotateIn {
+  from {
+    opacity: 0;
+    transform: rotate(-5deg) scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: rotate(0) scale(1);
+  }
+}
+
+/* ──────── LOGO STYLES ──────────── */
 
 .logo {
   height: 6em;
   padding: 1.5em;
   will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+  transition: all 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: floatCard 3s ease-in-out infinite;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.logo:hover {
+  filter: drop-shadow(0 0 20px rgba(200, 255, 0, 0.6)) drop-shadow(0 0 40px rgba(168, 85, 247, 0.3));
+  transform: scale(1.1) rotate(5deg);
+}
+
+.logo.react:hover {
+  filter: drop-shadow(0 0 20px rgba(97, 218, 251, 0.6));
 }
 
 @media (prefers-reduced-motion: no-preference) {
   a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
+    animation: floatCard 3s ease-in-out infinite;
   }
 }
 
+/* ──────── CARD STYLES ──────────── */
+
 .card {
   padding: 2em;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(18, 18, 20, 0.8), rgba(24, 24, 27, 0.8));
+  border: 1px solid rgba(39, 39, 42, 0.7);
+  backdrop-filter: blur(10px);
+  transition: all 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: slideInUp 0.6s ease-out;
 }
 
+.card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 20px 40px rgba(200, 255, 0, 0.15), 0 0 20px rgba(168, 85, 247, 0.1);
+  border-color: rgba(200, 255, 0, 0.3);
+}
+
+.card.accent {
+  border-color: rgba(200, 255, 0, 0.4);
+  box-shadow: 0 0 20px rgba(200, 255, 0, 0.2);
+}
+
+/* ──────── BUTTON STYLES ──────────── */
+
+.btn {
+  padding: 12px 24px;
+  border-radius: 12px;
+  border: none;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.btn:hover {
+  transform: translateY(-4px);
+}
+
+.btn:active {
+  transform: translateY(-1px) scale(0.98);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #c8ff00 0%, #a855f7 100%);
+  color: #0a0a0b;
+  box-shadow: 0 10px 30px rgba(200, 255, 0, 0.3);
+}
+
+.btn-primary:hover {
+  box-shadow: 0 20px 50px rgba(200, 255, 0, 0.5), 0 0 20px rgba(168, 85, 247, 0.3);
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 2px solid rgba(200, 255, 0, 0.5);
+  color: #c8ff00;
+  transition: all 300ms ease;
+}
+
+.btn-secondary:hover {
+  background: rgba(200, 255, 0, 0.1);
+  border-color: #c8ff00;
+  box-shadow: 0 0 20px rgba(200, 255, 0, 0.4);
+}
+
+/* ──────── TEXT STYLES ──────────── */
+
+.text-gradient {
+  background: linear-gradient(135deg, #c8ff00 0%, #06b6d4 50%, #a855f7 100%);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradientShift 5s ease infinite;
+}
+
+.text-glow {
+  text-shadow: 0 0 10px rgba(200, 255, 0, 0.8), 0 0 20px rgba(168, 85, 247, 0.6);
+  animation: glow 2s ease-in-out infinite;
+}
+
+@keyframes glow {
+
+  0%,
+  100% {
+    text-shadow: 0 0 10px rgba(200, 255, 0, 0.8);
+  }
+
+  50% {
+    text-shadow: 0 0 20px rgba(200, 255, 0, 1), 0 0 30px rgba(168, 85, 247, 0.8);
+  }
+}
+
+/* ──────── INPUT STYLES ──────────── */
+
+input,
+textarea,
+select {
+  transition: all 300ms ease;
+  border-radius: 12px;
+  padding: 12px 16px;
+  border: 2px solid rgba(39, 39, 42, 0.7);
+  background: rgba(18, 18, 20, 0.6);
+  color: white;
+  font-family: inherit;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: rgba(200, 255, 0, 0.5);
+  box-shadow: 0 0 20px rgba(200, 255, 0, 0.2), inset 0 0 20px rgba(200, 255, 0, 0.05);
+}
+
+input::placeholder {
+  color: rgba(113, 113, 122, 0.7);
+}
+
+/* ──────── SCROLLBAR ──────────── */
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(18, 18, 20, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(200, 255, 0, 0.5), rgba(168, 85, 247, 0.5));
+  border-radius: 10px;
+  transition: all 300ms ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(200, 255, 0, 0.8), rgba(168, 85, 247, 0.8));
+}
+
+/* ──────── UTILITY ──────────── */
+
 .read-the-docs {
-  color: #888;
+  color: rgba(113, 113, 122, 0.8);
 }
