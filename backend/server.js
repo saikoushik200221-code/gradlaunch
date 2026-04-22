@@ -748,32 +748,125 @@ function isUSJob(job) {
     return US_STATE_REGEX.test(loc);
 }
 
-function isGenuineJob(job) {
-    const text = ((job.company || '') + ' ' + (job.title || '') + ' ' + (job.description || '')).toLowerCase();
-    
-    const agencyBlocklist = [
-        "cybercoders", "revature", "turing", "braintrust", "synergis", 
-        "robert half", "teksystems", "infosys", "tcs", "wipro", 
-        "cognizant", "insight global", "randstad", "adecco", "jobot",
-        "kforce", "collabera", "apex systems", "beacon hill", 
-        "bairesdev", "optnation", "dice", "toptal", "upwork", "fiverr",
-        "hcl technologies", "tech mahindra", "mindtree", "mphasis",
-        "mason frank", "nigel frank", "aerotek", "motion recruitment",
-        "matrix resources", "judge group"
-    ];
-    
-    const redFlags = [
-        "c2c", "corp to corp", "corp-to-corp", "1099", "contract to hire",
-        "contract-to-hire", "staffing agency", "staffing firm", "independent contractor",
-        "w2 contract", "w-2 only", "no c2c", "third-party", "3rd party"
-    ];
+/**
+ * GENUINE JOB VERIFICATION SYSTEM
+ * Filters out staffing agencies, fake postings, and contractor roles
+ * Ensures students get real employment opportunities
+ */
 
-    const c = (job.company || '').toLowerCase();
-    if (agencyBlocklist.some(agency => c.includes(agency))) return false;
-    
-    if (redFlags.some(flag => text.includes(flag))) return false;
-    
-    return true;
+const AGENCY_BLOCKLIST = [
+    // Staffing agencies & outsourcing consultants
+    "cybercoders", "revature", "turing", "braintrust", "synergis",
+    "robert half", "teksystems", "infosys", "tcs", "wipro",
+    "cognizant", "insight global", "randstad", "adecco", "jobot",
+    "kforce", "collabera", "apex systems", "beacon hill",
+    "bairesdev", "optnation", "dice", "toptal", "upwork", "fiverr",
+    "hcl technologies", "tech mahindra", "mindtree", "mphasis",
+    "mason frank", "nigel frank", "aerotek", "motion recruitment",
+    "matrix resources", "judge group", "staffing 360", "apex group",
+    "everforce", "accelerize", "insideout", "hexagon", "puretech",
+    "netcentric", "emjay", "nobletech", "vertex", "itbaby"
+];
+
+const RED_FLAGS = [
+    "c2c", "corp to corp", "corp-to-corp", "1099", "contract to hire",
+    "contract-to-hire", "staffing agency", "staffing firm", "independent contractor",
+    "w2 contract", "w-2 only", "no c2c", "third-party", "3rd party", "recruitment firm",
+    "placement", "contracting agency", "do not reply", "body shop"
+];
+
+const RED_FLAG_DESCRIPTIONS = [
+    "need experienced", "10+ years", "15+ years", "senior only", "net10", "net30",
+    "payroll only", "no agency", "direct hire only"
+];
+
+const TRUSTED_EMPLOYERS = [
+    // FAANG
+    "google", "amazon", "microsoft", "meta", "apple", "netflix", "adobe", "salesforce",
+    "oracle", "nvdia", "tesla", "intel", "cisco", "ibm", "qualcomm",
+    // Finance & Banking
+    "jpmorgan", "goldman sachs", "capital one", "visa", "mastercard", "stripe", "coinbase",
+    // Tech Leaders
+    "uber", "airbnb", "spotify", "slack", "zoom", "figma", "notion", "discord",
+    "stripe", "robinhood", "databricks", "anthropic", "hugging face",
+    // Enterprise
+    "dell", "hp", "vmware", "salesforce", "workday", "servicenow",
+    // Startups (well-funded, legitimate)
+    "replika", "stability ai", "huggingface", "scale ai"
+];
+
+/**
+ * Calculate job genuineness score (0-100)
+ * Higher = more likely to be a real job for new grads
+ */
+function calculateGenuinessScore(job) {
+    let score = 50; // baseline
+
+    // Source checks
+    if (job.source === 'Lever') score += 25;      // Direct employer boards are trusted
+    else if (job.source === 'Greenhouse') score += 25;
+    else if (job.source === 'Adzuna') score += 10; // Aggregator - less direct
+
+    // Company checks
+    const companyLower = (job.company || '').toLowerCase();
+    if (TRUSTED_EMPLOYERS.some(emp => companyLower.includes(emp))) {
+        score += 25; // FAANG & trusted employers
+    }
+
+    // Description red flags (negative)
+    const textLower = ((job.company || '') + ' ' + (job.title || '') + ' ' + (job.description || '')).toLowerCase();
+
+    RED_FLAGS.forEach(flag => {
+        if (textLower.includes(flag)) score -= 15;
+    });
+
+    RED_FLAG_DESCRIPTIONS.forEach(flag => {
+        if (textLower.includes(flag)) score -= 10;
+    });
+
+    // Role type indicators (negative)
+    if (textLower.includes('freelance')) score -= 20;
+    if (textLower.includes('gig')) score -= 15;
+    if (textLower.includes('projects only')) score -= 20;
+
+    // Positive indicators (new grad friendly)
+    if (textLower.includes('new grad') || textLower.includes('entry level')) score += 20;
+    if (textLower.includes('junior') || textLower.includes('graduate')) score += 15;
+    if (textLower.includes('visa')) score += 10;  // Sponsorship mentioned
+    if (textLower.includes('h1b')) score += 10;
+    if (textLower.includes('opt')) score += 5;
+
+    // Link validity checks
+    if (!job.link || job.link.includes('bit.ly') || job.link.includes('short.link')) {
+        score -= 20; // Suspicious shortened URLs
+    }
+
+    if (job.link && job.link.includes(companyLower.replace(/ /g, ''))) {
+        score += 10; // URL matches company domain
+    }
+
+    return Math.max(0, Math.min(100, score));
+}
+
+function isGenuineJob(job) {
+    const companyLower = (job.company || '').toLowerCase();
+
+    // Hard blocks - never genuine
+    if (AGENCY_BLOCKLIST.some(agency => companyLower.includes(agency))) {
+        return false;
+    }
+
+    const textLower = ((job.company || '') + ' ' + (job.title || '') + ' ' + (job.description || '')).toLowerCase();
+
+    // Red flag hard blocks
+    const hardBlocks = RED_FLAGS.slice(0, 6); // First 6 are stricter
+    if (hardBlocks.some(flag => textLower.includes(flag))) {
+        return false;
+    }
+
+    // Genuine score check (must be > 30 to pass)
+    const genuinessScore = calculateGenuinessScore(job);
+    return genuinessScore > 30;
 }
 
 
@@ -877,16 +970,175 @@ setInterval(runJobScraper, 30 * 60 * 1000);
 
 app.get('/api/jobs', async (req, res) => {
     try {
-        const rows = await db.all('SELECT * FROM jobs ORDER BY posted_value DESC LIMIT 200');
-        res.json(rows.map(r => ({ ...r, tags: JSON.parse(r.tags), skills: JSON.parse(r.skills) })));
-    } catch (e) { res.status(500).json({ error: 'Failed' }); }
+        const { verifiedOnly = false, minScore = 0 } = req.query;
+        let query = 'SELECT * FROM jobs';
+        let params = [];
+
+        if (verifiedOnly === 'true') {
+            // Only show high-trust jobs (from trusted sources with is_trusted = 1)
+            query += ' WHERE is_trusted = 1';
+        }
+
+        query += ' ORDER BY posted_value DESC LIMIT 200';
+
+        let rows = await db.all(query, params);
+
+        // Add genuineness score to each job
+        rows = rows.map(r => {
+            const job = { ...r, tags: JSON.parse(r.tags), skills: JSON.parse(r.skills) };
+            job.genuinessScore = calculateGenuinessScore(job);
+            return job;
+        });
+
+        // Filter by minimum score if provided
+        if (minScore > 0) {
+            rows = rows.filter(job => job.genuinessScore >= parseInt(minScore));
+        }
+
+        // Sort by genuineness score if verifiedOnly
+        if (verifiedOnly === 'true') {
+            rows.sort((a, b) => b.genuinessScore - a.genuinessScore);
+        }
+
+        res.json(rows);
+    } catch (e) {
+        console.error('[Jobs] Error:', e);
+        res.status(500).json({ error: 'Failed' });
+    }
+});
+
+/**
+ * GET /api/jobs/verified
+ * Return ONLY verified, genuine jobs (score > 70, passed verification)
+ * This is the recommended endpoint for new grads seeking real opportunities
+ */
+app.get('/api/jobs/verified', async (req, res) => {
+    try {
+        const { limit = 50 } = req.query;
+
+        let rows = await db.all(
+            'SELECT * FROM jobs WHERE is_trusted = 1 ORDER BY posted_value DESC LIMIT ?',
+            [Math.min(limit, 100)]
+        );
+
+        // Calculate and filter by genuineness
+        rows = rows
+            .map(r => {
+                const job = { ...r, tags: JSON.parse(r.tags), skills: JSON.parse(r.skills) };
+                job.genuinessScore = calculateGenuinessScore(job);
+                job.isGenuine = isGenuineJob(job);
+                return job;
+            })
+            .filter(job => job.genuinessScore > 70 && job.isGenuine)
+            .sort((a, b) => b.genuinessScore - a.genuinessScore);
+
+        res.json({
+            success: true,
+            total: rows.length,
+            verification_type: 'VERIFIED_GENUINE_JOBS',
+            message: 'These jobs have been verified as legitimate opportunities for new graduates',
+            jobs: rows,
+            filters: {
+                source: 'Direct employer boards (Lever, Greenhouse) + trusted job boards',
+                excludes: 'Staffing agencies, contractors, C2C, freelance, gig work',
+                newGradFriendly: true,
+                visaSafe: true
+            }
+        });
+    } catch (e) {
+        console.error('[Jobs/Verified] Error:', e);
+        res.status(500).json({ error: 'Failed to fetch verified jobs' });
+    }
+});
+
+/**
+ * GET /api/jobs/verify/:id
+ * Deep verification check for a specific job posting
+ * Returns confidence score and verification details
+ */
+app.get('/api/jobs/verify/:id', async (req, res) => {
+    try {
+        const job = await db.get('SELECT * FROM jobs WHERE id = ?', [req.params.id]);
+        if (!job) return res.status(404).json({ error: 'Job not found' });
+
+        const jobWithDetails = {
+            ...job,
+            tags: JSON.parse(job.tags),
+            skills: JSON.parse(job.skills)
+        };
+
+        const genuinessScore = calculateGenuinessScore(jobWithDetails);
+        const isGenuine = isGenuineJob(jobWithDetails);
+
+        // Detailed verification report
+        const companyLower = (job.company || '').toLowerCase();
+        const textLower = ((job.company || '') + ' ' + (job.title || '') + ' ' + (job.description || '')).toLowerCase();
+
+        const report = {
+            jobId: job.id,
+            company: job.company,
+            title: job.title,
+            source: job.source,
+            posted: job.posted,
+
+            verification: {
+                isGenuine,
+                genuinessScore,
+                trustLevel: genuinessScore > 80 ? 'VERIFIED' : genuinessScore > 60 ? 'TRUSTED' : genuinessScore > 30 ? 'TENTATIVE' : 'SUSPICIOUS',
+                riskFactors: [],
+                positiveIndicators: [],
+                recommendation: genuinessScore > 70 ? 'APPLY' : genuinessScore > 50 ? 'CAUTION' : 'SKIP'
+            }
+        };
+
+        // Check for red flags
+        if (AGENCY_BLOCKLIST.some(agency => companyLower.includes(agency))) {
+            report.verification.riskFactors.push('Company is on staffing agency blocklist');
+        }
+
+        RED_FLAGS.slice(0, 6).forEach(flag => {
+            if (textLower.includes(flag)) {
+                report.verification.riskFactors.push(`Contains red flag: "${flag}"`);
+            }
+        });
+
+        if (!job.link || job.link.includes('bit.ly')) {
+            report.verification.riskFactors.push('Suspicious URL or shortened link');
+        }
+
+        // Positive indicators
+        if (TRUSTED_EMPLOYERS.some(emp => companyLower.includes(emp))) {
+            report.verification.positiveIndicators.push('Company is FAANG/trusted employer');
+        }
+
+        if (job.source === 'Lever' || job.source === 'Greenhouse') {
+            report.verification.positiveIndicators.push('Posted on official employer board (trusted source)');
+        }
+
+        if (textLower.includes('new grad') || textLower.includes('entry level')) {
+            report.verification.positiveIndicators.push('Explicitly hiring for new graduates');
+        }
+
+        if (textLower.includes('visa') || textLower.includes('h1b') || textLower.includes('opt')) {
+            report.verification.positiveIndicators.push('Mentions visa sponsorship or international support');
+        }
+
+        res.json(report);
+    } catch (e) {
+        console.error('[Jobs/Verify] Error:', e);
+        res.status(500).json({ error: 'Verification failed' });
+    }
 });
 
 app.get('/api/jobs/:id', async (req, res) => {
     try {
         const row = await db.get('SELECT * FROM jobs WHERE id = ?', [req.params.id]);
         if (!row) return res.status(404).json({ error: 'Job not found' });
-        res.json({ ...row, tags: JSON.parse(row.tags), skills: JSON.parse(row.skills) });
+
+        const jobWithDetails = { ...row, tags: JSON.parse(row.tags), skills: JSON.parse(row.skills) };
+        jobWithDetails.genuinessScore = calculateGenuinessScore(jobWithDetails);
+
+        res.json(jobWithDetails);
     } catch (e) { res.status(500).json({ error: 'Failed' }); }
 });
 

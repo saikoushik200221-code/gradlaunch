@@ -9,13 +9,15 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
     const [jobs, setJobs] = useState([]);
     const [loadingJobs, setLoadingJobs] = useState(false);
     const [search, setSearch] = useState("");
-    const [filters, setFilters] = useState({ 
-        newGrad: false, 
-        h1b_sponsor: false, 
-        stem_opt: false, 
-        cap_exempt: false, 
-        remote: false, 
-        trustedOnly: false 
+    const [showVerifiedOnly, setShowVerifiedOnly] = useState(true); // Default to verified jobs
+    const [filters, setFilters] = useState({
+        newGrad: false,
+        h1b_sponsor: false,
+        stem_opt: false,
+        cap_exempt: false,
+        remote: false,
+        trustedOnly: false,
+        minGenuinessScore: 70 // Only show jobs scoring 70+
     });
     const [error, setError] = useState(null);
     const [modalError, setModalError] = useState(null);
@@ -43,29 +45,38 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                 setError(null);
             }
             try {
+                // Use verified endpoint by default, or regular endpoint if advanced filters needed
+                const useVerified = showVerifiedOnly && !search && !Object.values(filters).some(v => v && v !== 70);
+                let endpoint = useVerified ? '/api/jobs/verified' : '/api/jobs';
+
                 const params = new URLSearchParams();
                 if (search) params.append("q", search);
-                if (filters.remote) params.append("remote", "true");
-                if (filters.newGrad) params.append("newGrad", "true");
-                if (filters.trustedOnly) params.append("trustedOnly", "true");
-                if (filters.h1b_sponsor) params.append("h1b_sponsor", "true");
-                if (filters.stem_opt) params.append("stem_opt", "true");
-                if (filters.cap_exempt) params.append("cap_exempt", "true");
-                if (profileText && profileText.toLowerCase() !== "add your resume or profile text here for ai matching...") {
-                    params.append("profileText", profileText);
+                if (!useVerified) {
+                    if (filters.remote) params.append("remote", "true");
+                    if (filters.newGrad) params.append("newGrad", "true");
+                    if (filters.trustedOnly || showVerifiedOnly) params.append("verifiedOnly", "true");
+                    if (filters.h1b_sponsor) params.append("h1b_sponsor", "true");
+                    if (filters.stem_opt) params.append("stem_opt", "true");
+                    if (filters.cap_exempt) params.append("cap_exempt", "true");
+                    if (filters.minGenuinessScore) params.append("minScore", filters.minGenuinessScore);
+                    if (profileText && profileText.toLowerCase() !== "add your resume or profile text here for ai matching...") {
+                        params.append("profileText", profileText);
+                    }
                 }
 
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-                const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/jobs?${params.toString()}`, { signal: controller.signal });
+                const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}${endpoint}?${params.toString()}`, { signal: controller.signal });
                 clearTimeout(timeoutId);
 
                 if (res.ok) {
                     const data = await res.json();
-                    setJobs(data || []);
+                    // Extract jobs array from verified response format
+                    const jobsArray = useVerified ? (data.jobs || data || []) : (data || []);
+                    setJobs(jobsArray);
                     setLastUpdated(new Date());
-                    if (!data || data.length === 0) {
+                    if (!jobsArray || jobsArray.length === 0) {
                         retryTimer = setTimeout(() => setRetryCount(c => c + 1), 10000);
                     }
                 } else {
@@ -89,7 +100,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
         const debounce = setTimeout(() => fetchJobs(false), 300);
         const autoRefresh = setInterval(() => fetchJobs(true), 10 * 60 * 1000);
         return () => { clearTimeout(debounce); clearInterval(autoRefresh); if (retryTimer) clearTimeout(retryTimer); };
-    }, [search, filters.remote, filters.newGrad, filters.trustedOnly, filters.h1b_sponsor, filters.stem_opt, filters.cap_exempt, retryCount]);
+    }, [search, showVerifiedOnly, filters.remote, filters.newGrad, filters.trustedOnly, filters.h1b_sponsor, filters.stem_opt, filters.cap_exempt, filters.minGenuinessScore, retryCount]);
 
     useEffect(() => {
         setAnalysis(null);
@@ -121,7 +132,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
         setShowSmartApply(true); // Open modal early to show progress
         setModalError(null);
         setStreamState({ state: 'INIT', message: 'Connecting to agent orchestrator...' });
-        
+
         try {
             const token = localStorage.getItem("token");
             const qs = new URLSearchParams({
@@ -153,7 +164,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                     buffer += decoder.decode(value, { stream: true });
                     const lines = buffer.split('\n');
                     buffer = lines.pop(); // keep remainder
-                    
+
                     let currentEvent = null;
                     for (const line of lines) {
                         if (line.startsWith('event: ')) {
@@ -180,7 +191,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                                 }
                             } catch (e) {
                                 // likely incomplete JSON chunk, wait for next buffer (shouldn't happen with split('\n'))
-                                if(line.includes("error")) throw new Error("JSON parse error on SSE stream.");
+                                if (line.includes("error")) throw new Error("JSON parse error on SSE stream.");
                             }
                         }
                     }
@@ -237,7 +248,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
             const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/jobs/dispatch`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     jobId: selectedJob.id,
                     tier: deepAnalysis?.ats_type === 'greenhouse' || deepAnalysis?.ats_type === 'lever' ? 3 : (deepAnalysis?.ats_type === 'workday' ? 2 : 1),
                     resumeId: "master" // Default for now
@@ -254,7 +265,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                 const data = await res.json().catch(() => ({}));
                 throw new Error(data.error || 'Submission failed');
             }
-        } catch (e) { 
+        } catch (e) {
             console.error("Dispatch failed", e);
             setModalError(e.message || "Dispatch failed.");
             setStage("failed");
@@ -276,7 +287,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                     />
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 opacity-40 text-lg">🔍</span>
                 </div>
-                
+
                 <div className="flex flex-wrap gap-2">
                     {[
                         ["newGrad", "🎓 New Grad"],
@@ -291,6 +302,13 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                             {label}
                         </button>
                     ))}
+                    <button
+                        onClick={() => setShowVerifiedOnly(!showVerifiedOnly)}
+                        className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border flex items-center gap-2 ${showVerifiedOnly ? "bg-green-500/20 border-green-500 text-green-400" : "bg-surface/50 border-border/50 text-white/50 hover:text-white"}`}
+                        title="Show only jobs from verified employers (no staffing agencies, no contractors)"
+                    >
+                        ✅ Verified Jobs Only
+                    </button>
                     <button
                         onClick={() => setFilters(prev => ({ ...prev, h1b_sponsor: !prev.h1b_sponsor }))}
                         className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${filters.h1b_sponsor ? "bg-primary/20 border-primary text-primary" : "bg-surface/50 border-border/50 text-white/50 hover:text-white"}`}
@@ -355,14 +373,21 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                                     className={`group relative bg-card/40 border border-border hover:border-${colorClass}/40 rounded-[2.5rem] p-8 cursor-pointer transition-all hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.3)] hover:-translate-y-2 ${selectedJob?.id === job.id ? `ring-2 ring-${colorClass} border-transparent bg-card/80` : ''}`}
                                 >
                                     <div className="flex items-start justify-between mb-6">
-                                        <LogoCircle 
-                                            letter={job.logo?.length === 1 ? job.logo : job.company?.charAt(0).toUpperCase()} 
-                                            logoUrl={job.logo?.startsWith("http") ? job.logo : null} 
-                                            size={64} 
+                                        <LogoCircle
+                                            letter={job.logo?.length === 1 ? job.logo : job.company?.charAt(0).toUpperCase()}
+                                            logoUrl={job.logo?.startsWith("http") ? job.logo : null}
+                                            size={64}
                                         />
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-2 flex-wrap">
                                             {job.is_trusted === 1 && <TrustBadge />}
-                                            <button 
+                                            {job.genuinessScore && (
+                                                <div className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border flex items-center gap-1 ${job.genuinessScore > 70 ? 'bg-green-500/10 border-green-500 text-green-400' : job.genuinessScore > 50 ? 'bg-amber-500/10 border-amber-500 text-amber-400' : 'bg-red-500/10 border-red-500 text-red-400'}`}
+                                                    title={`Job verification score: ${job.genuinessScore}/100`}
+                                                >
+                                                    {job.genuinessScore > 70 ? '✓ VERIFIED' : job.genuinessScore > 50 ? '⚠ CAUTION' : '✗ RISKY'}
+                                                </div>
+                                            )}
+                                            <button
                                                 onClick={(e) => { e.stopPropagation(); onToggleSave(job); }}
                                                 className={`p-3 rounded-[1.2rem] transition-all ${isSaved(job.id) ? 'text-accent bg-accent/10 shadow-[0_0_20px_rgba(200,255,0,0.1)]' : 'bg-white/5 text-muted hover:bg-white/10'}`}
                                             >
@@ -394,21 +419,21 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
 
                                     <div className="flex gap-3">
                                         {isHigh ? (
-                                            <button 
+                                            <button
                                                 onClick={(e) => { e.stopPropagation(); window.open(job.link, "_blank"); }}
                                                 className="flex-1 bg-accent hover:brightness-110 text-black py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-accent/10 active:scale-95 transition-all"
                                             >
                                                 Apply Now
                                             </button>
                                         ) : (
-                                            <button 
+                                            <button
                                                 onClick={(e) => { e.stopPropagation(); onAddToTracker({ ...job, optimize: true }); }}
                                                 className="flex-1 bg-purple hover:brightness-110 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-purple/10 active:scale-95 transition-all"
                                             >
                                                 Optimize First
                                             </button>
                                         )}
-                                        <button 
+                                        <button
                                             onClick={(e) => { e.stopPropagation(); setSelectedJob(job); }}
                                             className="px-6 border border-border/50 hover:bg-white/5 rounded-2xl text-[10px] font-black uppercase tracking-widest text-muted hover:text-white transition-all"
                                         >
@@ -440,7 +465,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                     <div className="flex-1 overflow-y-auto p-8 space-y-10 custom-scrollbar pb-32">
                         {/* 🧠 Intelligence Injection */}
                         {!deepAnalysis ? (
-                            <button 
+                            <button
                                 onClick={analyzeFitDeep}
                                 disabled={analyzing}
                                 className="w-full bg-accent/10 border border-accent/20 rounded-[2.5rem] p-10 group hover:bg-accent/20 transition-all active:scale-[0.99]"
@@ -451,8 +476,8 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                                 {analyzing && <div className="mt-6 h-1 w-full bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-accent animate-shimmer w-1/2" /></div>}
                             </button>
                         ) : (
-                            <JobIntelligenceCard 
-                                analysis={deepAnalysis} 
+                            <JobIntelligenceCard
+                                analysis={deepAnalysis}
                                 onTailor={handleTailor}
                                 onApply={() => setShowSmartApply(true)}
                                 loadingTailor={tailoring}
@@ -552,7 +577,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                             <span className="text-base group-hover:rotate-12 transition-transform">🪄</span>
                             <span>Optimize & Align Profile</span>
                         </button>
-                        
+
                         <button
                             onClick={() => window.open(selectedJob.link, "_blank")}
                             className="bg-accent py-5 rounded-[2rem] text-black text-[10px] font-black uppercase tracking-widest shadow-lg shadow-accent/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 group flex-1"
@@ -560,7 +585,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                             <span>Apply Now</span>
                             <span className="text-lg group-hover:translate-x-1 transition-transform">→</span>
                         </button>
-                        
+
                         <button
                             onClick={() => { onAddToTracker(selectedJob); setSelectedJob(null); }}
                             className="bg-white/5 border border-white/10 hover:bg-white/10 px-6 rounded-[2rem] text-[10px] font-black uppercase tracking-widest text-muted hover:text-white transition-all"
@@ -572,8 +597,8 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
             )}
             {/* Smart Apply Modal Overlay */}
             {showSmartApply && (
-                <SmartApplyModal 
-                    job={selectedJob} 
+                <SmartApplyModal
+                    job={selectedJob}
                     tailoredResume={tailoredResume}
                     changesMade={changesMade}
                     analysis={deepAnalysis}
