@@ -748,6 +748,35 @@ function isUSJob(job) {
     return US_STATE_REGEX.test(loc);
 }
 
+function isGenuineJob(job) {
+    const text = ((job.company || '') + ' ' + (job.title || '') + ' ' + (job.description || '')).toLowerCase();
+    
+    const agencyBlocklist = [
+        "cybercoders", "revature", "turing", "braintrust", "synergis", 
+        "robert half", "teksystems", "infosys", "tcs", "wipro", 
+        "cognizant", "insight global", "randstad", "adecco", "jobot",
+        "kforce", "collabera", "apex systems", "beacon hill", 
+        "bairesdev", "optnation", "dice", "toptal", "upwork", "fiverr",
+        "hcl technologies", "tech mahindra", "mindtree", "mphasis",
+        "mason frank", "nigel frank", "aerotek", "motion recruitment",
+        "matrix resources", "judge group"
+    ];
+    
+    const redFlags = [
+        "c2c", "corp to corp", "corp-to-corp", "1099", "contract to hire",
+        "contract-to-hire", "staffing agency", "staffing firm", "independent contractor",
+        "w2 contract", "w-2 only", "no c2c", "third-party", "3rd party"
+    ];
+
+    const c = (job.company || '').toLowerCase();
+    if (agencyBlocklist.some(agency => c.includes(agency))) return false;
+    
+    if (redFlags.some(flag => text.includes(flag))) return false;
+    
+    return true;
+}
+
+
 async function fetchLeverJobs() {
     const companies = ["spotify", "palantir", "yelp", "roblox"];
     let jobs = [];
@@ -818,7 +847,7 @@ async function runJobScraper() {
     isScraping = true;
     try {
         const [leverJobs, greenhouseJobs] = await Promise.all([fetchLeverJobs(), fetchGreenhouseJobs()]);
-        const allRaw = [...leverJobs, ...greenhouseJobs].filter(isUSJob);
+        const allRaw = [...leverJobs, ...greenhouseJobs].filter(job => isUSJob(job) && isGenuineJob(job));
         const existing = await db.all('SELECT id FROM jobs');
         const existingIds = new Set(existing.map(e => e.id));
         const newJobs = allRaw.filter(j => !existingIds.has(j.id));
