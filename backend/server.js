@@ -970,29 +970,57 @@ setInterval(runJobScraper, 30 * 60 * 1000);
 
 app.get('/api/jobs', async (req, res) => {
     try {
-        const { verifiedOnly = false, minScore = 0 } = req.query;
-        let query = 'SELECT * FROM jobs';
-        let params = [];
+        const {
+            verifiedOnly = false,
+            minScore = 0,
+            minSalary = 0,
+            postedWithinDays = 0,
+            remote,
+            h1b_sponsor,
+            newGrad,
+        } = req.query;
 
-        if (verifiedOnly === 'true') {
-            // Only show high-trust jobs (from trusted sources with is_trusted = 1)
-            query += ' WHERE is_trusted = 1';
+        const where = [];
+        const params = [];
+
+        if (verifiedOnly === 'true') where.push('is_trusted = 1');
+
+        // Salary filter — `salary_min` stored as int on the jobs table.
+        const minSal = parseInt(minSalary) || 0;
+        if (minSal > 0) {
+            where.push('(salary_min IS NOT NULL AND salary_min >= ?)');
+            params.push(minSal);
         }
 
+        // Recency filter — created_at is ISO text; SQLite handles datetime('now', '-N days').
+        const days = parseInt(postedWithinDays) || 0;
+        if (days > 0) {
+            where.push("created_at >= datetime('now', ?)");
+            params.push(`-${days} days`);
+        }
+
+        // Lightweight tag filters on the stored tags JSON blob.
+        if (remote === 'true')       where.push("(LOWER(COALESCE(location, '')) LIKE '%remote%' OR LOWER(COALESCE(tags, '')) LIKE '%remote%')");
+        if (h1b_sponsor === 'true')  where.push('sponsorship_friendly = 1');
+        if (newGrad === 'true')      where.push("LOWER(COALESCE(tags, '')) LIKE '%new grad%'");
+
+        let query = 'SELECT * FROM jobs';
+        if (where.length) query += ' WHERE ' + where.join(' AND ');
         query += ' ORDER BY posted_value DESC LIMIT 200';
 
         let rows = await db.all(query, params);
 
         // Add genuineness score to each job
         rows = rows.map(r => {
-            const job = { ...r, tags: JSON.parse(r.tags), skills: JSON.parse(r.skills) };
+            const job = { ...r, tags: JSON.parse(r.tags || '[]'), skills: JSON.parse(r.skills || '[]') };
             job.genuinessScore = calculateGenuinessScore(job);
             return job;
         });
 
-        // Filter by minimum score if provided
-        if (minScore > 0) {
-            rows = rows.filter(job => job.genuinessScore >= parseInt(minScore));
+        // Filter by minimum genuineness score if provided
+        const minG = parseInt(minScore) || 0;
+        if (minG > 0) {
+            rows = rows.filter(job => job.genuinessScore >= minG);
         }
 
         // Sort by genuineness score if verifiedOnly

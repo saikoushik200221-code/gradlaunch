@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { TagBadge, LogoCircle, MatchBadgeLarge, MatchChanceBadge, AssistantBubble } from "./Common";
+import MatchBreakdown from "./MatchBreakdown";
 
 export default function JobView({ onAddToTracker }) {
     const { id } = useParams();
@@ -10,6 +11,7 @@ export default function JobView({ onAddToTracker }) {
     const [loading, setLoading] = useState(true);
     const [analysis, setAnalysis] = useState(null);
     const [analyzing, setAnalyzing] = useState(false);
+    const [analysisError, setAnalysisError] = useState(null);
 
     useEffect(() => {
         async function fetchJob() {
@@ -30,20 +32,27 @@ export default function JobView({ onAddToTracker }) {
     async function analyzeFit() {
         if (!job) return;
         setAnalyzing(true);
-        // Simulating deep analysis
-        setTimeout(() => {
-            setAnalysis({
-                score: job.match || 82,
-                readiness: 75,
-                reasons: [
-                    "High semantic overlap with your Node.js backend projects.",
-                    "Matches your 'Startup' environment preference recorded during onboarding.",
-                    "Location alignment: This is a hybrid role in your target metro area."
-                ],
-                gaps: ["Missing specific experience with GraphQL mentioned in description."]
+        setAnalysisError(null);
+        try {
+            const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
+            const token = localStorage.getItem("token");
+            const res = await fetch(`${apiBase}/api/ai/analyze-job`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({ job }),
             });
+            if (!res.ok) throw new Error(`Analysis failed (${res.status})`);
+            const data = await res.json();
+            setAnalysis(data);
+        } catch (err) {
+            console.error("Analyze-fit failed", err);
+            setAnalysisError(err.message || "Failed to analyze fit.");
+        } finally {
             setAnalyzing(false);
-        }, 1500);
+        }
     }
 
     if (loading) {
@@ -115,41 +124,49 @@ export default function JobView({ onAddToTracker }) {
 
                 {/* Right: Decision Engine */}
                 <div className="lg:col-span-4 space-y-8">
-                    <div className="bg-surface border border-border/50 rounded-[3rem] p-10 space-y-10 sticky top-10">
+                    <div className="bg-surface border border-border/50 rounded-[3rem] p-8 lg:p-10 space-y-8 sticky top-10">
                         <div className="space-y-4">
-                            <MatchBadgeLarge score={match} />
-                            <MatchChanceBadge score={match} />
+                            <MatchBadgeLarge score={analysis?.matchScore ?? match} />
+                            <MatchChanceBadge score={analysis?.matchScore ?? match} />
                         </div>
 
-                        {!analysis ? (
+                        {!analysis && !analyzing && (
                             <div className="space-y-6">
-                                <p className="text-muted text-[11px] font-bold italic leading-relaxed">System is awaiting deep semantic alignment analysis...</p>
-                                <button onClick={analyzeFit} disabled={analyzing} className="w-full bg-accent/10 border border-accent/30 text-accent py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-accent hover:text-black transition-all disabled:opacity-50">
-                                    {analyzing ? "Simulating fit..." : "✨ Generate AI Insight"}
+                                <p className="text-muted text-[11px] font-bold italic leading-relaxed">
+                                    System is awaiting deep semantic alignment analysis...
+                                </p>
+                                <button onClick={analyzeFit} disabled={analyzing}
+                                    className="w-full bg-accent/10 border border-accent/30 text-accent py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-accent hover:text-black transition-all disabled:opacity-50">
+                                    ✨ Generate AI Insight
                                 </button>
-                            </div>
-                        ) : (
-                            <div className="space-y-8 animate-fade-in">
-                                <div className="space-y-4">
-                                    {analysis.reasons.map((r, i) => (
-                                        <div key={i} className="flex gap-4 items-start bg-accent/5 p-4 rounded-2xl border border-accent/10">
-                                            <span className="text-accent text-sm">✦</span>
-                                            <p className="text-xs font-medium leading-relaxed">{r}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                                {analysis.gaps.length > 0 && (
-                                    <div className="p-4 bg-pink-500/5 border border-pink-500/20 rounded-2xl">
-                                        <p className="text-[10px] font-black text-pink-400 uppercase tracking-widest mb-2">Skill Gaps</p>
-                                        <p className="text-[11px] text-white/60 italic">{analysis.gaps[0]}</p>
-                                    </div>
+                                {analysisError && (
+                                    <p className="text-[11px] text-pink-400 italic">{analysisError}</p>
                                 )}
                             </div>
                         )}
 
-                        <div className="pt-6 border-t border-border/50 space-y-4 text-[11px] font-black uppercase tracking-widest text-muted">
+                        {analyzing && (
+                            <div className="flex items-center justify-center py-10">
+                                <div className="w-10 h-10 border-4 border-accent border-t-transparent rounded-full animate-spin" />
+                            </div>
+                        )}
+
+                        {analysis && (
+                            <div className="animate-fade-in">
+                                <MatchBreakdown analysis={analysis} compact />
+                                <button onClick={analyzeFit}
+                                    className="mt-6 w-full text-[10px] font-black uppercase tracking-widest text-muted hover:text-accent transition-all">
+                                    ↻ Re-analyze
+                                </button>
+                            </div>
+                        )}
+
+                        <div className="pt-6 border-t border-border/50 space-y-3 text-[11px] font-black uppercase tracking-widest text-muted">
                             <div className="flex justify-between"><span>Type:</span> <span className="text-white">{job.type}</span></div>
-                            <div className="flex justify-between"><span>Visa:</span> <span className="text-accent">OPT/H1B Friendly</span></div>
+                            <div className="flex justify-between"><span>Visa:</span> <span className="text-accent">{analysis?.sponsorshipIntel ? "See Visa Intel" : "OPT/H1B Friendly"}</span></div>
+                            {analysis?.ats_type && (
+                                <div className="flex justify-between"><span>ATS:</span> <span className="text-white uppercase">{analysis.ats_type}</span></div>
+                            )}
                         </div>
                     </div>
                 </div>

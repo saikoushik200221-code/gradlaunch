@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { EmptyState } from "./Common";
+import ResumeDiffView from "./ResumeDiffView";
 const jsPDF = window.jspdf ? window.jspdf.jsPDF : null;
 
 export default function ResumeTailor({ initialJobDesc, globalContext }) {
@@ -271,9 +272,25 @@ export default function ResumeTailor({ initialJobDesc, globalContext }) {
 
                     <div className="relative">
                         {tailored ? (
-                            <div className="text-[13px] leading-relaxed font-mono text-white/80 whitespace-pre-wrap selection:bg-accent selection:text-black p-4 bg-black/20 rounded-2xl border border-white/5 italic">
-                                {tailored}
-                            </div>
+                            <ResumeDiffView
+                                originalResume={background}
+                                tailored={{
+                                    tailoredResume: tailored,
+                                    score: atsScore ?? 0,
+                                    atsScore: atsScore ?? 0,
+                                    keywords: keywords || [],
+                                    keywordMatches: (keywords || []).filter(k =>
+                                        (tailored || "").toLowerCase().includes(String(k).toLowerCase())
+                                    ).length,
+                                    metricsCount: (tailored.match(/\d+%|\d+x|\$\d+k?|\d+\+/g) || []).length,
+                                    bulletsCount: (tailored.match(/^[-•*]\s/gm) || []).length,
+                                    tips: optimizationTips?.tips || [],
+                                    add: optimizationTips?.add || [],
+                                    improvedBullet: improvedBullet || null,
+                                }}
+                                onAccept={(accepted) => setTailored(accepted)}
+                                onExportPdf={downloadAsPDF}
+                            />
                         ) : (
                             <EmptyState
                                 icon="✨"

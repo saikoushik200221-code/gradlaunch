@@ -17,7 +17,9 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
         cap_exempt: false,
         remote: false,
         trustedOnly: false,
-        minGenuinessScore: 70 // Only show jobs scoring 70+
+        minGenuinessScore: 70, // Only show jobs scoring 70+
+        minSalary: 0,          // USD, 0 = no filter
+        postedWithinDays: 0,   // 0 = any; 1, 7, 30 chips
     });
     const [error, setError] = useState(null);
     const [modalError, setModalError] = useState(null);
@@ -46,7 +48,12 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
             }
             try {
                 // Use verified endpoint by default, or regular endpoint if advanced filters needed
-                const useVerified = showVerifiedOnly && !search && !Object.values(filters).some(v => v && v !== 70);
+                const hasAdvancedFilter = Object.entries(filters).some(([k, v]) => {
+                    if (k === "minGenuinessScore") return v !== 70;
+                    if (k === "minSalary" || k === "postedWithinDays") return v > 0;
+                    return Boolean(v);
+                });
+                const useVerified = showVerifiedOnly && !search && !hasAdvancedFilter;
                 let endpoint = useVerified ? '/api/jobs/verified' : '/api/jobs';
 
                 const params = new URLSearchParams();
@@ -59,6 +66,8 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                     if (filters.stem_opt) params.append("stem_opt", "true");
                     if (filters.cap_exempt) params.append("cap_exempt", "true");
                     if (filters.minGenuinessScore) params.append("minScore", filters.minGenuinessScore);
+                    if (filters.minSalary > 0) params.append("minSalary", filters.minSalary);
+                    if (filters.postedWithinDays > 0) params.append("postedWithinDays", filters.postedWithinDays);
                     if (profileText && profileText.toLowerCase() !== "add your resume or profile text here for ai matching...") {
                         params.append("profileText", profileText);
                     }
@@ -100,7 +109,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
         const debounce = setTimeout(() => fetchJobs(false), 300);
         const autoRefresh = setInterval(() => fetchJobs(true), 10 * 60 * 1000);
         return () => { clearTimeout(debounce); clearInterval(autoRefresh); if (retryTimer) clearTimeout(retryTimer); };
-    }, [search, showVerifiedOnly, filters.remote, filters.newGrad, filters.trustedOnly, filters.h1b_sponsor, filters.stem_opt, filters.cap_exempt, filters.minGenuinessScore, retryCount]);
+    }, [search, showVerifiedOnly, filters.remote, filters.newGrad, filters.trustedOnly, filters.h1b_sponsor, filters.stem_opt, filters.cap_exempt, filters.minGenuinessScore, filters.minSalary, filters.postedWithinDays, retryCount]);
 
     useEffect(() => {
         setAnalysis(null);
@@ -340,6 +349,58 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                         {showSavedOnly ? "📚 Saved Only" : "🔖 View Saved"}
                     </button>
                     <button onClick={() => setRetryCount(c => c + 1)} className="p-2 border border-border rounded-xl text-muted hover:text-accent transition-colors">🔄</button>
+                </div>
+            </div>
+
+            {/* Second row: salary slider + recency chips */}
+            <div className="flex flex-col md:flex-row gap-4 items-start md:items-center px-6 py-3 bg-surface/30 border-b border-border/40 backdrop-blur-xl">
+                {/* Recency chips */}
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black text-muted uppercase tracking-widest mr-1">Posted</span>
+                    {[
+                        [0, "Any"],
+                        [1, "24h"],
+                        [7, "7d"],
+                        [30, "30d"],
+                    ].map(([days, label]) => (
+                        <button
+                            key={days}
+                            onClick={() => setFilters(prev => ({ ...prev, postedWithinDays: days }))}
+                            className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+                                filters.postedWithinDays === days
+                                    ? "bg-accent/10 border-accent text-accent"
+                                    : "bg-card border-border text-muted hover:border-muted"
+                            }`}
+                        >
+                            {label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Salary slider */}
+                <div className="flex items-center gap-3 md:ml-auto w-full md:w-auto">
+                    <span className="text-[10px] font-black text-muted uppercase tracking-widest whitespace-nowrap">Min Salary</span>
+                    <input
+                        type="range"
+                        min="0"
+                        max="250000"
+                        step="10000"
+                        value={filters.minSalary}
+                        onChange={(e) => setFilters(prev => ({ ...prev, minSalary: Number(e.target.value) }))}
+                        className="flex-1 md:w-48 accent-accent"
+                    />
+                    <span className={`text-xs font-black tabular-nums min-w-[72px] text-right ${filters.minSalary > 0 ? "text-accent" : "text-muted"}`}>
+                        {filters.minSalary === 0 ? "Any" : `$${(filters.minSalary / 1000).toFixed(0)}k+`}
+                    </span>
+                    {filters.minSalary > 0 && (
+                        <button
+                            onClick={() => setFilters(prev => ({ ...prev, minSalary: 0 }))}
+                            className="text-[10px] text-muted hover:text-white"
+                            title="Clear salary filter"
+                        >
+                            ✕
+                        </button>
+                    )}
                 </div>
             </div>
 
