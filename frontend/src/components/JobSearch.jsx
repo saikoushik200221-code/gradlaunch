@@ -82,8 +82,14 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
 
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 15000);
+                const token = localStorage.getItem("token");
 
-                const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}${endpoint}?${params.toString()}`, { signal: controller.signal });
+                const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}${endpoint}?${params.toString()}`, {
+                    signal: controller.signal,
+                    headers: {
+                        ...(token ? { "Authorization": `Bearer ${token}` } : {})
+                    }
+                });
                 clearTimeout(timeoutId);
 
                 if (res.ok) {
@@ -371,6 +377,28 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                         {showSavedOnly ? "📚 Saved Only" : "🔖 View Saved"}
                     </button>
                     <button onClick={() => setRetryCount(c => c + 1)} className="p-2 border border-border rounded-xl text-muted hover:text-accent transition-colors">🔄</button>
+                    <button
+                        onClick={async () => {
+                            const token = localStorage.getItem("token");
+                            try {
+                                const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/jobs/scrape`, {
+                                    method: "POST",
+                                    headers: { "Authorization": `Bearer ${token}` }
+                                });
+                                if (res.ok) {
+                                    alert("System Sync Complete! New jobs added to database.");
+                                    setRetryCount(c => c + 1);
+                                } else {
+                                    const data = await res.json();
+                                    alert(`Sync Error: ${data.error || res.status}`);
+                                }
+                            } catch (e) { alert("Sync failed. Check connection."); }
+                        }}
+                        className="p-2 border border-border rounded-xl text-muted hover:text-green-400 transition-colors"
+                        title="Force refresh internal job database (Lever/Greenhouse boards)"
+                    >
+                        🛰️
+                    </button>
                 </div>
             </div>
 

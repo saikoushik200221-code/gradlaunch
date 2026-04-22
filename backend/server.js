@@ -1050,6 +1050,15 @@ app.get('/api/jobs', async (req, res) => {
     }
 });
 
+app.post('/api/jobs/scrape', authenticateToken, async (req, res) => {
+    try {
+        await runJobScraper();
+        res.json({ success: true, message: 'Scraper completed. Refresh your search results.' });
+    } catch (e) {
+        res.status(500).json({ error: 'Scraper failed: ' + e.message });
+    }
+});
+
 /**
  * GET /api/jobs/verified
  * Return ONLY verified, genuine jobs (score > 70, passed verification)
