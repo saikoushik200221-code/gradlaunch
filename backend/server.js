@@ -871,7 +871,11 @@ function isGenuineJob(job) {
 
 
 async function fetchLeverJobs() {
-    const companies = ["spotify", "palantir", "yelp", "roblox"];
+    const companies = [
+        "spotify", "palantir", "yelp", "roblox", "netflix", "twitch", "stripe", "square", "affirm", 
+        "datadog", "figma", "notion", "airtable", "asana", "box", "dropbox", "hashicorp", "okta", "slack",
+        "zoom", "robinhood", "coinbase", "kraken", "ripple", "instacart", "doordash", "postmates", "uber", "lyft"
+    ];
     let jobs = [];
     for (const company of companies) {
         try {
@@ -904,7 +908,11 @@ async function fetchLeverJobs() {
 }
 
 async function fetchGreenhouseJobs() {
-    const boards = ["discord", "cloudflare", "mongodb", "cruise", "paloaltonetworks"];
+    const boards = [
+        "discord", "cloudflare", "mongodb", "cruise", "paloaltonetworks", "github", "gitlab", "reddit", "snapchat", 
+        "pinterest", "quora", "medium", "substack", "wealthfront", "betterment", "wealthsimple", "gusto", "zenefits",
+        "rippling", "brex", "ramp", "plaid", "checkr", "carta", "flexport", "convoy", "rivian", "lucid", "tesla"
+    ];
     let jobs = [];
     for (const board of boards) {
         try {
@@ -971,6 +979,7 @@ setInterval(runJobScraper, 30 * 60 * 1000);
 app.get('/api/jobs', async (req, res) => {
     try {
         const {
+            q = '',
             verifiedOnly = false,
             minScore = 0,
             minSalary = 0,
@@ -982,6 +991,12 @@ app.get('/api/jobs', async (req, res) => {
 
         const where = [];
         const params = [];
+
+        if (q) {
+            where.push("(title LIKE ? OR company LIKE ? OR description LIKE ?)");
+            const searchTerm = `%${q}%`;
+            params.push(searchTerm, searchTerm, searchTerm);
+        }
 
         if (verifiedOnly === 'true') where.push('is_trusted = 1');
 
@@ -1057,7 +1072,7 @@ app.get('/api/jobs/verified', async (req, res) => {
                 job.isGenuine = isGenuineJob(job);
                 return job;
             })
-            .filter(job => job.genuinessScore > 70 && job.isGenuine)
+            .filter(job => job.genuinessScore > 45 && job.isGenuine)
             .sort((a, b) => b.genuinessScore - a.genuinessScore);
 
         res.json({

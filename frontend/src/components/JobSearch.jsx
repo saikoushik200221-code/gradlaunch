@@ -36,6 +36,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
     const [showSavedOnly, setShowSavedOnly] = useState(false);
     const [retryCount, setRetryCount] = useState(0);
     const [lastUpdated, setLastUpdated] = useState(null);
+    const [isGlobalSearch, setIsGlobalSearch] = useState(false); // New: Toggle for external search
 
     const isSaved = (jobId) => savedJobs?.some(sj => sj.id === jobId);
 
@@ -54,11 +55,17 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                     return Boolean(v);
                 });
                 const useVerified = showVerifiedOnly && !search && !hasAdvancedFilter;
-                let endpoint = useVerified ? '/api/jobs/verified' : '/api/jobs';
+                const endpoint = isGlobalSearch ? '/api/jobs/adzuna/search' : (useVerified ? '/api/jobs/verified' : '/api/jobs');
 
                 const params = new URLSearchParams();
-                if (search) params.append("q", search);
-                if (!useVerified) {
+                if (search) {
+                    if (isGlobalSearch) params.append("query", search);
+                    else params.append("q", search);
+                }
+                if (isGlobalSearch) {
+                    params.append("limit", "50");
+                    if (filters.remote) params.append("location", "remote");
+                } else if (!useVerified) {
                     if (filters.remote) params.append("remote", "true");
                     if (filters.newGrad) params.append("newGrad", "true");
                     if (filters.trustedOnly || showVerifiedOnly) params.append("verifiedOnly", "true");
@@ -81,8 +88,16 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
 
                 if (res.ok) {
                     const data = await res.json();
-                    // Extract jobs array from verified response format
-                    const jobsArray = useVerified ? (data.jobs || data || []) : (data || []);
+                    // Extract jobs array from response formats
+                    // Adzuna: { success: true, jobs: [] }
+                    // Verified: { success: true, jobs: [] }
+                    // Standard: []
+                    let jobsArray = [];
+                    if (isGlobalSearch || useVerified) {
+                        jobsArray = data.jobs || data.matches || data || [];
+                    } else {
+                        jobsArray = Array.isArray(data) ? data : (data.jobs || []);
+                    }
                     setJobs(jobsArray);
                     setLastUpdated(new Date());
                     if (!jobsArray || jobsArray.length === 0) {
@@ -109,7 +124,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
         const debounce = setTimeout(() => fetchJobs(false), 300);
         const autoRefresh = setInterval(() => fetchJobs(true), 10 * 60 * 1000);
         return () => { clearTimeout(debounce); clearInterval(autoRefresh); if (retryTimer) clearTimeout(retryTimer); };
-    }, [search, showVerifiedOnly, filters.remote, filters.newGrad, filters.trustedOnly, filters.h1b_sponsor, filters.stem_opt, filters.cap_exempt, filters.minGenuinessScore, filters.minSalary, filters.postedWithinDays, retryCount]);
+    }, [search, showVerifiedOnly, isGlobalSearch, filters.remote, filters.newGrad, filters.trustedOnly, filters.h1b_sponsor, filters.stem_opt, filters.cap_exempt, filters.minGenuinessScore, filters.minSalary, filters.postedWithinDays, retryCount]);
 
     useEffect(() => {
         setAnalysis(null);
@@ -341,6 +356,13 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                         className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${filters.remote ? "bg-primary/20 border-primary text-primary shadow-lg shadow-primary/20" : "bg-surface/50 border-border/50 text-white/50 hover:text-white"}`}
                     >
                         Remote Only
+                    </button>
+                    <button
+                        onClick={() => setIsGlobalSearch(!isGlobalSearch)}
+                        className={`px-4 py-2 rounded-xl text-xs font-black transition-all border flex items-center gap-2 ${isGlobalSearch ? "bg-amber-500/20 border-amber-500 text-amber-400" : "bg-surface/50 border-border/50 text-white/50 hover:text-white"}`}
+                        title="Search all posted jobs across the web using Adzuna engine"
+                    >
+                        🌐 Global Search
                     </button>
                     <button
                         onClick={() => setShowSavedOnly(!showSavedOnly)}
