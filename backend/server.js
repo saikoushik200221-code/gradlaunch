@@ -1447,83 +1447,23 @@ app.post('/api/ai/analyze-job', authenticateToken, async (req, res) => {
         await db.run('INSERT INTO agent_activity_log (user_id, job_id, session_id, action, details, status) VALUES (?,?,?,?,?,?)',
             [req.user.id, job.id, sessionId, 'analyze_jd', JSON.stringify({ title: job.title, company: job.company }), 'in_progress']);
 
-        // Step 2: Extract keywords from JD
-        const jdText = (job.description || job.title || '').toLowerCase();
-        const techKeywords = ['react', 'vue', 'angular', 'node.js', 'python', 'java', 'go', 'typescript', 'javascript', 'sql', 'aws', 'docker', 'kubernetes', 'graphql', 'redis', 'mongodb', 'postgresql', 'terraform', 'ci/cd', 'rest', 'api', 'microservices', 'agile', 'scrum', 'git', 'linux', 'c++', 'rust', 'swift', 'kotlin', 'flutter', 'django', 'flask', 'spring', 'express', 'next.js', 'tailwind', 'figma', 'kafka', 'rabbitmq', 'elasticsearch'];
-        const jdKeywords = techKeywords.filter(k => jdText.includes(k));
+        // Step 2 & 3: Perform detailed match analysis
+        const analysis = calculateMatchScore(resumeData || "", job);
 
-        // Step 3: Calculate real match score
-        let matchScore = 70;
-        let breakdown = { skills: 60, experience: 70, keywords: 50, visa: 80 };
-        let missingSkills = [];
-        let keywordGaps = [];
-
-        if (resumeData) {
-            const userSkills = (resumeData.skills || []).map(s => String(s).toLowerCase());
-            const matchedSkills = jdKeywords.filter(k => userSkills.some(s => s.includes(k) || k.includes(s)));
-            missingSkills = jdKeywords.filter(k => !userSkills.some(s => s.includes(k) || k.includes(s))).slice(0, 8);
-
-            const skillScore = jdKeywords.length > 0 ? Math.round((matchedSkills.length / jdKeywords.length) * 100) : 70;
-            const expYears = resumeData.experience?.years || user?.experience_years || 0;
-            const expScore = Math.min(100, expYears * 20);
-
-            // Keyword density analysis
-            const resumeText = JSON.stringify(resumeData).toLowerCase();
-            const keywordHits = jdKeywords.filter(k => resumeText.includes(k));
-            const keywordScore = jdKeywords.length > 0 ? Math.round((keywordHits.length / jdKeywords.length) * 100) : 50;
-            keywordGaps = jdKeywords.filter(k => !resumeText.includes(k)).slice(0, 6);
-
-            breakdown = { skills: skillScore, experience: expScore, keywords: keywordScore, visa: 80 };
-            matchScore = Math.round(breakdown.skills * 0.35 + breakdown.experience * 0.25 + breakdown.keywords * 0.25 + breakdown.visa * 0.15);
-        } else {
-            missingSkills = jdKeywords.slice(0, 5);
-            keywordGaps = jdKeywords.slice(0, 4);
-        }
-
-        // Step 4: ATS Score estimation
-        let currentAtsScore = 55;
-        let projectedAtsScore = 55;
-        if (resumeData) {
-            const hasStructuredSections = resumeData.experience && resumeData.education && resumeData.skills;
-            const hasMetrics = JSON.stringify(resumeData).match(/\d+%|\d+x|\$\d+|\d+\+/g);
-            currentAtsScore = 50 + (hasStructuredSections ? 15 : 0) + (hasMetrics ? Math.min(hasMetrics.length * 5, 20) : 0) + Math.min(breakdown.keywords * 0.15, 15);
-            projectedAtsScore = Math.min(98, currentAtsScore + missingSkills.length * 3 + keywordGaps.length * 2 + 8);
-            currentAtsScore = Math.round(currentAtsScore);
-            projectedAtsScore = Math.round(projectedAtsScore);
-        }
-
-        // Step 5: Response chance estimation
-        const companySize = (job.company_type || '').toLowerCase();
-        let responseBase = companySize.includes('startup') ? 15 : companySize.includes('mnc') ? 5 : 10;
-        const responseChanceLow = Math.max(2, Math.round(responseBase * (matchScore / 100)));
-        const responseChanceHigh = Math.min(35, responseChanceLow + 8);
-        const expectedResponseChance = `${responseChanceLow}-${responseChanceHigh}%`;
-
-        // Step 6: Confidence
-        const applyConfidence = matchScore >= 80 ? 'HIGH' : matchScore >= 60 ? 'MED' : 'LOW';
-
-        // Step 7: Generate improvements
-        const improvements = [];
-        if (missingSkills.length > 0) improvements.push(`Add ${missingSkills.slice(0, 3).join(', ')} to your skills section`);
-        if (keywordGaps.length > 0) improvements.push(`Weave these keywords into your bullets: ${keywordGaps.slice(0, 3).join(', ')}`);
-        if (currentAtsScore < 80) improvements.push('Add quantifiable metrics (%, $, numbers) to at least 3 bullet points');
-        if (breakdown.experience < 70) improvements.push('Highlight relevant project experience to compensate for years gap');
-        if (improvements.length === 0) improvements.push('Your profile is well-aligned — focus on a strong cover letter');
-
-        // Step 8: Auto-fixable issues
+        // Step 8: Auto-fixable issues (derived from analysis)
         const autoFixable = [];
-        missingSkills.forEach(skill => {
+        analysis.missingSkills.forEach(skill => {
             autoFixable.push({ type: 'skill', severity: 'critical', label: skill, fixType: 'add_skill', context: skill });
         });
-        if (currentAtsScore < 80) {
+        if (analysis.atsScore.current < 80) {
             autoFixable.push({ type: 'format', severity: 'moderate', label: 'Add metrics to bullets', fixType: 'improve_bullets', context: 'metrics' });
         }
-        if (breakdown.keywords < 60) {
+        if (analysis.breakdown.keywords < 60) {
             autoFixable.push({ type: 'summary', severity: 'moderate', label: 'Optimize summary for this role', fixType: 'improve_summary', context: job.title });
         }
 
         // Step 9: Visa intel
-        let sponsorshipIntel = 'No specific visa information detected for this posting.';
+        let sponsorshipIntel = analysis.sponsorshipIntel || 'No specific visa information detected for this posting.';
         try {
             const visaIntel = await enrichJobWithVisaIntelligence(db, job);
             if (visaIntel) sponsorshipIntel = visaIntel.summary || visaIntel.message || sponsorshipIntel;
@@ -1551,27 +1491,18 @@ app.post('/api/ai/analyze-job', authenticateToken, async (req, res) => {
             'INSERT INTO agent_activity_log (user_id, job_id, session_id, action, details, duration_ms, status) VALUES (?,?,?,?,?,?,?)',
             [req.user.id, job.id, sessionId, 'analyze_jd', JSON.stringify({
                 input: { jobTitle: job.title, jobCompany: job.company, jobId: job.id },
-                output: { matchScore, atsType, gapCount: missingSkills.length, atsScore: { current: currentAtsScore, projected: projectedAtsScore } },
-                model: 'weighted-scoring-v3',
+                output: { matchScore: analysis.matchScore, atsType, gapCount: analysis.missingSkills.length, atsScore: analysis.atsScore },
+                model: 'weighted-scoring-v4',
                 latency_ms: duration
             }), duration, 'complete']
         );
 
         res.json({
             sessionId,
-            matchScore,
-            breakdown,
-            applyConfidence,
-            expectedResponseChance,
-            missingSkills,
-            keywordGaps,
-            improvements,
+            ...analysis,
             autoFixable,
-            atsScore: { current: currentAtsScore, projected: projectedAtsScore },
             ats_type: atsType,
             sponsorshipIntel,
-            confidence: applyConfidence,
-            responseProbability: expectedResponseChance,
             fieldConfidence
         });
     } catch (e) {

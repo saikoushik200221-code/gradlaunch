@@ -353,7 +353,7 @@ function GradLaunchContent() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto custom-scrollbar p-8">
+        <main className="flex-1 overflow-y-auto custom-scrollbar p-8 pb-32">
           <div className="max-w-7xl mx-auto h-full animate-fade-in">
             <Routes>
               <Route path="/" element={<Dashboard savedJobs={savedJobs} profileText={profileText} />} />

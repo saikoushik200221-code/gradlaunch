@@ -3,8 +3,8 @@
  *
  * Legacy callers only expect { score, explanation, breakdown } — those
  * fields are preserved. This version also returns a richer payload
- * (strengths, weaknesses, missing skills, confidence) that matches the
- * shape consumed by the MatchBreakdown UI on the frontend.
+ * (strengths, weaknesses, missing skills, confidence, ATS scores, response probability)
+ * that matches the shape consumed by the MatchBreakdown UI on the frontend.
  *
  * Weights (sum to 1.0):
  *   skills     0.40
@@ -63,7 +63,6 @@ function calculateMatchScore(resume, job) {
     }
 
     // --- Education axis (0..100) ---
-    // Simplified heuristic until education data is normalized.
     const educationAxis = resumeData.education ? 90 : 70;
 
     // --- Keyword axis (0..100) ---
@@ -98,6 +97,21 @@ function calculateMatchScore(resume, job) {
         visaAxis       * 0.05
     );
 
+    // --- ATS Score estimation ---
+    const hasStructuredSections = resumeData.experience && resumeData.education && resumeData.skills;
+    const hasMetrics = resumeText.match(/\d+%|\d+x|\$\d+|\d+\+/g);
+    let currentAtsScore = 50 + (hasStructuredSections ? 15 : 0) + (hasMetrics ? Math.min(hasMetrics.length * 5, 20) : 0) + Math.min(keywordsAxis * 0.15, 15);
+    let projectedAtsScore = Math.min(98, currentAtsScore + missingSkills.length * 3 + keywordGaps.length * 2 + 8);
+    currentAtsScore = Math.round(currentAtsScore);
+    projectedAtsScore = Math.round(projectedAtsScore);
+
+    // --- Response probability estimation ---
+    const companySize = (job.company_type || '').toLowerCase();
+    let responseBase = companySize.includes('startup') ? 15 : companySize.includes('mnc') ? 5 : 10;
+    const responseChanceLow = Math.max(2, Math.round(responseBase * (finalScore / 100)));
+    const responseChanceHigh = Math.min(35, responseChanceLow + 8);
+    const responseProbability = `${responseChanceLow}-${responseChanceHigh}%`;
+
     const axes = [
         { key: 'skills',     label: 'Skills',     value: skillsAxis },
         { key: 'experience', label: 'Experience', value: experienceAxis },
@@ -115,12 +129,18 @@ function calculateMatchScore(resume, job) {
 
     const confidence = finalScore >= 80 ? 'HIGH' : finalScore >= 60 ? 'MED' : 'LOW';
 
+    // --- Improvement suggestions ---
+    const improvements = [];
+    if (missingSkills.length > 0) improvements.push(`Add ${missingSkills.slice(0, 3).join(', ')} to your skills section`);
+    if (keywordGaps.length > 0) improvements.push(`Weave these keywords into your bullets: ${keywordGaps.slice(0, 3).join(', ')}`);
+    if (currentAtsScore < 80) improvements.push('Add quantifiable metrics (%, $, numbers) to your experience bullets');
+    if (improvements.length === 0) improvements.push('Your profile is well-aligned — focus on a strong cover letter');
+
     return {
         // Legacy-compatible fields
         score: Math.min(100, finalScore),
         explanation: explanation.join('. ') + '.',
         breakdown: {
-            // Back-compat numeric fields expected by old callers:
             skills: skillsAxis,
             experience: experienceAxis,
             keywords: keywordsAxis,
@@ -137,6 +157,9 @@ function calculateMatchScore(resume, job) {
         missingSkills,
         keywordGaps,
         confidence,
+        atsScore: { current: currentAtsScore, projected: projectedAtsScore },
+        responseProbability,
+        improvements,
     };
 }
 
