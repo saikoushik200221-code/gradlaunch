@@ -79,8 +79,9 @@ export default function ResumeTailor({ initialJobDesc, globalContext }) {
             setMatchAnalysis({
                 score: data.score,
                 missing_skills: data.missingSkills,
-                strengths: data.whyFit || ["Matches your core technical stack"],
-                suggestions: data.suggestions
+                strengths: data.whyFit || (data.matchedSkills?.length > 0 ? data.matchedSkills.map(s => `Strong match: ${s}`) : ["Matches your core technical stack"]),
+                suggestions: data.suggestions,
+                analysis: data.analysis
             });
         } catch (e) { 
             console.error(e);
@@ -180,7 +181,7 @@ export default function ResumeTailor({ initialJobDesc, globalContext }) {
 
                     <div className="grid grid-cols-2 gap-4 mt-10">
                         <button
-                            onClick={analyzeDeepMatch}
+                            onClick={() => analyzeDeepMatch()}
                             disabled={analyzingMatch || !background}
                             className="bg-white/5 border border-border hover:border-accent/30 py-5 rounded-3xl font-syne font-black text-xs uppercase tracking-widest text-white transition-all disabled:opacity-30"
                         >

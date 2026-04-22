@@ -1894,6 +1894,320 @@ app.post('/api/anthropic/messages', async (req, res) => {
     res.json({ content: [{ type: 'text', text: "I'm your Orion AI assistant. How can I help with your job search?" }] });
 });
 
+/**
+ * POST /api/ai/optimize
+ * AI Resume Optimization: Full tailoring, bullet enhancement, ATS optimization, or tips
+ * CRITICAL: This endpoint was missing and causing ResumeTailor to fail
+ */
+app.post('/api/ai/optimize', aiLimiter, authenticateToken, async (req, res) => {
+    const { resume, jobDescription, bulletOnly = false, mode = 'full' } = req.body;
+
+    if (!resume) return res.status(400).json({ error: 'Resume text required' });
+    if (!jobDescription) return res.status(400).json({ error: 'Job description required' });
+
+    try {
+        const user = await db.get('SELECT name, skills FROM users WHERE id = ?', [req.user.id]);
+        let tailoredResume = resume;
+        let improvedBullet = '';
+        let keywords = [];
+        let score = 0;
+        let tips = [];
+        let add = [];
+
+        // Extract keywords from job description
+        const jdLower = jobDescription.toLowerCase();
+        const techKeywords = [
+            'react', 'vue', 'angular', 'node.js', 'python', 'java', 'go', 'typescript', 'javascript',
+            'sql', 'aws', 'docker', 'kubernetes', 'graphql', 'redis', 'mongodb', 'postgresql',
+            'terraform', 'ci/cd', 'rest', 'api', 'microservices', 'agile', 'scrum', 'git',
+            'linux', 'c++', 'rust', 'swift', 'kotlin', 'flutter', 'django', 'flask'
+        ];
+        keywords = techKeywords.filter(k => jdLower.includes(k)).slice(0, 10);
+
+        // Calculate initial ATS score
+        const hasBullets = resume.match(/^[-•*]\s/gm);
+        const hasMetrics = resume.match(/\d+%|\d+x|\$\d+k?|\d+\+/g);
+        const hasKeywords = keywords.filter(k => resume.toLowerCase().includes(k)).length;
+
+        score = 40; // baseline
+        score += hasBullets ? 15 : 0;
+        score += (hasMetrics?.length || 0) * 3;
+        score += hasKeywords * 5;
+        score = Math.min(100, score);
+
+        // Mode-specific logic
+        if (bulletOnly) {
+            // Enhanced bullet point optimization only
+            if (GEMINI_API_KEY) {
+                try {
+                    const { GoogleGenerativeAI } = require('@google/generative-ai');
+                    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+                    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+                    const prompt = `Improve this single resume bullet point for ATS and impact. Make it measurement-driven and concise.
+                    
+Original bullet: "${resume}"
+
+Return ONLY the improved bullet (max 20 words), no explanation.`;
+
+                    const result = await model.generateContent(prompt);
+                    improvedBullet = result.response.text().trim();
+                } catch (e) {
+                    console.error('[AI/Optimize] Gemini error:', e.message);
+                    improvedBullet = resume.replace(/led/i, 'Spearheaded').replace(/helped/i, 'Engineered');
+                }
+            } else {
+                improvedBullet = resume
+                    .replace(/led/i, 'Spearheaded')
+                    .replace(/helped/i, 'Engineered')
+                    .replace(/designed/i, 'Architected');
+            }
+        } else {
+            // Full resume tailoring with AI
+            if (GEMINI_API_KEY) {
+                try {
+                    const { GoogleGenerativeAI } = require('@google/generative-ai');
+                    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+                    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+                    const prompt = `You are an expert resume writer. Tailor this resume for this specific job while maintaining 100% accuracy about the candidate's actual experience. DO NOT fabricate or exaggerate.
+
+RESUME:
+${resume}
+
+TARGET JOB:
+${jobDescription.substring(0, 1000)}
+
+INSTRUCTIONS:
+1. Keep all factual information accurate
+2. Reorder/emphasize relevant skills and experience
+3. Add industry keywords naturally
+4. Improve action verbs in bullets
+5. Add/emphasize quantifiable metrics only if they exist in original resume
+6. Format as professional resume
+7. Return ONLY the tailored resume, no explanations
+
+CRITICAL: Do NOT add fake experience or false metrics.`;
+
+                    const result = await model.generateContent(prompt);
+                    tailoredResume = result.response.text().trim();
+
+                    // Recalculate ATS score for optimized version
+                    const hasOptBullets = tailoredResume.match(/^[-•*]\s/gm);
+                    const hasOptMetrics = tailoredResume.match(/\d+%|\d+x|\$\d+k?|\d+\+/g);
+                    const hasOptKeywords = keywords.filter(k => tailoredResume.toLowerCase().includes(k)).length;
+
+                    score = 40;
+                    score += hasOptBullets ? 20 : 0;
+                    score += (hasOptMetrics?.length || 0) * 3;
+                    score += hasOptKeywords * 5;
+                    score = Math.min(100, score);
+
+                    // Generate suggested additions
+                    add = [];
+                    const missingSkills = keywords.filter(k => !tailoredResume.toLowerCase().includes(k)).slice(0, 3);
+                    if (missingSkills.length > 0) {
+                        add.push(`Consider highlighting experience with: ${missingSkills.join(', ')}`);
+                    }
+                    if (score < 80) {
+                        add.push('Add quantifiable metrics (%, $, numbers) to at least 3 bullet points');
+                    }
+
+                } catch (e) {
+                    console.error('[AI/Optimize] Gemini error:', e.message);
+                    // Fallback: Basic improvement
+                    tailoredResume = resume;
+                }
+            }
+
+            // Generate optimization tips
+            if (!bulletOnly) {
+                tips = [];
+                const resumeLower = resume.toLowerCase();
+
+                if (score < 70) tips.push('Add more quantifiable metrics (%, $, numbers) to your bullets');
+                if (hasKeywords < 3) tips.push(`Incorporate these keywords: ${keywords.slice(0, 3).join(', ')}`);
+                if (!hasBullets) tips.push('Use bullet points for better ATS readability');
+
+                // Generate bullet suggestions
+                add = [];
+                if (keywords.length > 0) {
+                    const missing = keywords.filter(k => !resume.toLowerCase().includes(k)).slice(0, 2);
+                    if (missing.length > 0) {
+                        add.push(`✓ Highlight ${missing[0]} expertise in your experience section`);
+                        if (missing[1]) add.push(`✓ Weave in ${missing[1]} to demonstrate technical breadth`);
+                    }
+                }
+                if (score < 70) {
+                    add.push('✓ Add quantifiable impact metrics to strengthen bullet points');
+                }
+                if (add.length === 0) {
+                    add.push('✓ Your resume is well-structured. Focus on tailoring for this specific role.');
+                }
+            }
+        }
+
+        res.json({
+            success: true,
+            tailoredResume,
+            improvedBullet,
+            score,
+            keywords,
+            tips,
+            add,
+            atsScore: score,
+            keywordMatches: hasKeywords,
+            metricsCount: hasMetrics?.length || 0,
+            bulletsCount: hasBullets?.length || 0
+        });
+
+    } catch (e) {
+        console.error('[AI/Optimize] Error:', e);
+        res.status(500).json({ error: 'Optimization failed: ' + e.message });
+    }
+});
+
+/**
+ * POST /api/ai/match
+ * Deep resume-to-job matching analysis with skill gaps and compatibility scoring
+ * CRITICAL: This endpoint was missing, causing match analysis to fail
+ */
+app.post('/api/ai/match', aiLimiter, authenticateToken, async (req, res) => {
+    const { resume, jobDescription, jobTitle } = req.body;
+
+    if (!resume) return res.status(400).json({ error: 'Resume text required' });
+    if (!jobDescription) return res.status(400).json({ error: 'Job description required' });
+
+    try {
+        // Extract skills from job description
+        const jdLower = jobDescription.toLowerCase();
+        const allSkills = [
+            'react', 'vue', 'angular', 'node.js', 'python', 'java', 'go', 'typescript', 'javascript',
+            'sql', 'aws', 'docker', 'kubernetes', 'graphql', 'redis', 'mongodb', 'postgresql',
+            'terraform', 'ci/cd', 'rest', 'api', 'microservices', 'agile', 'scrum', 'git',
+            'linux', 'c++', 'rust', 'swift', 'kotlin', 'flutter', 'django', 'flask',
+            'spring', 'express', 'next.js', 'tailwind', 'figma', 'kafka', 'rabbitmq', 'elasticsearch',
+            'machine learning', 'data analysis', 'tableau', 'powerbi', 'salesforce', 'sap',
+            'communication', 'leadership', 'project management', 'problem solving'
+        ];
+
+        const requiredSkills = allSkills.filter(skill => jdLower.includes(skill));
+        const resumeLower = resume.toLowerCase();
+        const matchedSkills = requiredSkills.filter(skill => resumeLower.includes(skill));
+        const missingSkills = requiredSkills.filter(skill => !resumeLower.includes(skill));
+
+        // Calculate match percentage
+        const score = requiredSkills.length > 0
+            ? Math.round((matchedSkills.length / requiredSkills.length) * 100)
+            : 50;
+
+        // Generate suggestions
+        let suggestions = [];
+        if (missingSkills.length > 0) {
+            suggestions.push(`Learn or highlight: ${missingSkills.slice(0, 2).join(', ')}`);
+        }
+        suggestions.push('Tailor your cover letter to highlight relevant projects');
+        if (score > 80) {
+            suggestions.push('Your profile is strong for this role — apply now!');
+        } else if (score > 60) {
+            suggestions.push('You have solid fundamentals — emphasize adjacent skills in interviews');
+        }
+
+        // Generate analysis
+        let analysis = '';
+        if (GEMINI_API_KEY) {
+            try {
+                const { GoogleGenerativeAI } = require('@google/generative-ai');
+                const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+                const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+                const prompt = `Provide a 2-3 sentence deep match analysis for this candidate applying to this role.
+
+RESUME EXCERPT: ${resume.substring(0, 300)}
+
+JOB DESCRIPTION: ${jobDescription.substring(0, 500)}
+
+Be honest about fit. Return ONLY the analysis, no intro.`;
+
+                const result = await model.generateContent(prompt);
+                analysis = result.response.text().trim();
+            } catch (e) {
+                console.error('[AI/Match] Gemini error:', e.message);
+            }
+        }
+
+        if (!analysis) {
+            analysis = score >= 80
+                ? 'Strong technical alignment with excellent skill coverage for this role.'
+                : score >= 60
+                    ? 'Decent skill match with some gaps that could be bridged with targeted learning.'
+                    : 'Moderate experience level but notable skill gaps to address before applying.';
+        }
+
+        res.json({
+            success: true,
+            score,
+            matchedSkills,
+            missingSkills,
+            suggestions,
+            analysis,
+            recommendation: score >= 80 ? 'STRONG' : score >= 60 ? 'GOOD' : 'MODERATE'
+        });
+
+    } catch (e) {
+        console.error('[AI/Match] Error:', e);
+        res.status(500).json({ error: 'Match analysis failed: ' + e.message });
+    }
+});
+
+/**
+ * POST /api/ai/tips
+ * Generate optimization tips for resume/job fit
+ */
+app.post('/api/ai/tips', aiLimiter, authenticateToken, async (req, res) => {
+    const { resume, jobDescription } = req.body;
+
+    if (!resume) return res.status(400).json({ error: 'Resume text required' });
+    if (!jobDescription) return res.status(400).json({ error: 'Job description required' });
+
+    try {
+        const tips = [];
+        const resumeLower = resume.toLowerCase();
+        const jdLower = jobDescription.toLowerCase();
+
+        // Analyze gaps
+        if (!resumeLower.includes('metric') && !resumeLower.match(/\d+%|\d+x|\$\d+/)) {
+            tips.push('Add quantifiable metrics to your bullet points (percentages, multiples, or dollar amounts)');
+        }
+
+        if (!resumeLower.includes('led') && !resumeLower.includes('managed')) {
+            tips.push('Include leadership or ownership examples to demonstrate initiative');
+        }
+
+        if (jdLower.includes('remote') && !resumeLower.includes('remote')) {
+            tips.push('Highlight remote work or distributed team experience');
+        }
+
+        if (jdLower.includes('agile') && !resumeLower.includes('agile')) {
+            tips.push('Mention familiarity with Agile/Scrum methodologies');
+        }
+
+        if (!resumeLower.includes('impact') && !resumeLower.match(/result|outcome|achieve/i)) {
+            tips.push('Focus on business impact and outcomes, not just responsibilities');
+        }
+
+        if (tips.length === 0) {
+            tips.push('Your resume is well-aligned with this role. Consider a targeted cover letter.');
+        }
+
+        res.json({ success: true, tips });
+
+    } catch (e) {
+        console.error('[AI/Tips] Error:', e);
+        res.status(500).json({ error: 'Failed to generate tips' });
+    }
+});
+
 // --- SPA FALLBACK ---
 app.use(async (req, res) => {
     if (req.url.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
