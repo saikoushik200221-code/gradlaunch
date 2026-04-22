@@ -1,23 +1,6 @@
 import * as React from "react"
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
-import { LucideIcon } from "lucide-react"
-
-interface DockProps {
-  className?: string
-  items: {
-    icon: LucideIcon
-    label: string
-    onClick?: () => void
-  }[]
-}
-
-interface DockIconButtonProps {
-  icon: LucideIcon
-  label: string
-  onClick?: () => void
-  className?: string
-}
 
 const floatingAnimation = {
   initial: { y: 0 },
@@ -31,7 +14,7 @@ const floatingAnimation = {
   }
 }
 
-const DockIconButton = React.forwardRef<HTMLButtonElement, DockIconButtonProps>(
+const DockIconButton = React.forwardRef(
   ({ icon: Icon, label, onClick, className }, ref) => {
     return (
       <motion.button
@@ -61,11 +44,11 @@ const DockIconButton = React.forwardRef<HTMLButtonElement, DockIconButtonProps>(
 )
 DockIconButton.displayName = "DockIconButton"
 
-const Dock = React.forwardRef<HTMLDivElement, DockProps>(
+const Dock = React.forwardRef(
   ({ items, className }, ref) => {
     return (
-      <div ref={ref} className={cn("w-full h-64 flex items-center justify-center p-2", className)}>
-        <div className="w-full max-w-4xl h-64 rounded-2xl flex items-center justify-center relative">
+      <div ref={ref} className={cn("w-full h-auto flex items-center justify-center p-2", className)}>
+        <div className="w-full max-w-4xl rounded-2xl flex items-center justify-center relative">
           <motion.div
             initial="initial"
             animate="animate"

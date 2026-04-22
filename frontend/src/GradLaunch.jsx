@@ -11,6 +11,8 @@ import { GoogleLogin } from "@react-oauth/google";
 import Onboarding from "./components/Onboarding";
 import JobView from "./components/JobView";
 import LandingPage from "./components/LandingPage";
+import { Dock } from "./components/ui/dock-two";
+import { LayoutDashboard, Search, Bot, FileText, ClipboardList, Sparkles, UserCircle } from "lucide-react";
 const AIFormFiller = React.lazy(() => import("./components/AIFormFiller"));
 
 // ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
@@ -159,7 +161,7 @@ function GradLaunchContent() {
   const [profileText, setProfileText] = useState("");
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showLoginForm, setShowLoginForm] = useState(false);
@@ -275,6 +277,16 @@ function GradLaunchContent() {
     { id: "profile", label: "Identity", icon: "👤", path: "/profile" },
   ];
 
+  const dockItems = [
+    { icon: LayoutDashboard, label: "Dashboard", onClick: () => navigate("/") },
+    { icon: Search, label: "Discovery", onClick: () => navigate("/jobs") },
+    { icon: Bot, label: "Copilot", onClick: () => navigate("/copilot") },
+    { icon: FileText, label: "Optimizer", onClick: () => navigate("/resume") },
+    { icon: ClipboardList, label: "Pipeline", onClick: () => navigate("/tracker") },
+    { icon: Sparkles, label: "Autofill", onClick: () => navigate("/ai-form") },
+    { icon: UserCircle, label: "Identity", onClick: () => navigate("/profile") },
+  ];
+
   return (
     <div className="flex h-screen bg-background text-white font-inter overflow-hidden relative">
       {/* Background Glows */}
@@ -360,6 +372,13 @@ function GradLaunchContent() {
             </Routes>
           </div>
         </main>
+
+        {/* Dock Navigation */}
+        <div className="absolute bottom-6 left-0 right-0 z-50 pointer-events-none">
+          <div className="pointer-events-auto">
+            <Dock items={dockItems} />
+          </div>
+        </div>
       </div>
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
