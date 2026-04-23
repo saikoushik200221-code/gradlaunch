@@ -13,6 +13,7 @@ import JobView from "./components/JobView";
 import LandingPage from "./components/LandingPage";
 import { Dock } from "./components/ui/dock-two";
 import { LayoutDashboard, Search, Bot, FileText, ClipboardList, Sparkles, UserCircle } from "lucide-react";
+import useExtensionBridge from "./hooks/useExtensionBridge";
 const AIFormFiller = React.lazy(() => import("./components/AIFormFiller"));
 
 // ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
@@ -165,6 +166,10 @@ function GradLaunchContent() {
   const [toast, setToast] = useState(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showLoginForm, setShowLoginForm] = useState(false);
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem("token"));
+
+  // Keep the Chrome extension's stored JWT in sync with the dashboard login.
+  useExtensionBridge(authToken);
 
   const showToast = (message, type = "success") => {
     setToast({ message, type });
@@ -205,11 +210,13 @@ function GradLaunchContent() {
 
   function handleLogout() {
     localStorage.removeItem("token");
+    setAuthToken(null);
     setCurrentUser(null);
     setShowOnboarding(false);
   }
 
   async function handleAddToTracker(job) {
+    if (!currentUser) { setShowLoginForm(true); return; }
     const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
     const token = localStorage.getItem("token");
     const exists = applications.find(a => a.company === job.company && a.role === job.title);
@@ -235,6 +242,7 @@ function GradLaunchContent() {
   }
 
   async function handleToggleSave(job) {
+    if (!currentUser) { setShowLoginForm(true); return; }
     const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
     const token = localStorage.getItem("token");
     const isAlreadySaved = savedJobs.some(sj => sj.id === job.id);
@@ -253,19 +261,22 @@ function GradLaunchContent() {
 
   if (authLoading) return <div className="h-screen bg-background flex items-center justify-center font-syne text-accent animate-pulse uppercase tracking-[0.4em] font-black">Initializing Orion AI...</div>;
   
-  if (!currentUser) {
+  const isPublicPath = location.pathname === "/jobs" || location.pathname.startsWith("/jobs/");
+  const showAuthOverlay = !currentUser && !isPublicPath;
+
+  if (showAuthOverlay) {
     if (!showLoginForm) {
       return <LandingPage onShowLogin={() => setShowLoginForm(true)} />;
     }
-    return <AuthScreen onLogin={(user, token) => { 
-      localStorage.setItem("token", token); 
+    return <AuthScreen onLogin={(user, token) => {
+      localStorage.setItem("token", token);
+      setAuthToken(token);
       setCurrentUser(user);
-      // If no profile data, trigger onboarding
       if (!user.hasProfile) setShowOnboarding(true);
     }} />;
   }
 
-  if (showOnboarding) return <Onboarding onComplete={() => setShowOnboarding(false)} currentUser={currentUser} />;
+  if (showOnboarding && currentUser) return <Onboarding onComplete={() => setShowOnboarding(false)} currentUser={currentUser} />;
 
   const TABS = [
     { id: "dashboard", label: "Dashboard", icon: "📊", path: "/" },
@@ -315,23 +326,34 @@ function GradLaunchContent() {
           ))}
         </nav>
 
-        {/* User Profile Mini */}
+        {/* User Profile / Guest Login */}
         <div className="p-6 border-t border-border bg-card/20 mb-4 mx-4 rounded-3xl">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-accent to-purple flex items-center justify-center font-black text-black">
-              {currentUser.name?.[0].toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold truncate leading-none mb-1 uppercase tracking-tight">{currentUser.name}</p>
-              <p className="text-[10px] text-muted truncate italic">PRO STATUS ACTIVE</p>
-            </div>
-          </div>
-          <button 
-            onClick={handleLogout}
-            className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
-          >
-            Sign Out
-          </button>
+          {currentUser ? (
+            <>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-accent to-purple flex items-center justify-center font-black text-black">
+                  {currentUser.name?.[0].toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold truncate leading-none mb-1 uppercase tracking-tight">{currentUser.name}</p>
+                  <p className="text-[10px] text-muted truncate italic">PRO STATUS ACTIVE</p>
+                </div>
+              </div>
+              <button 
+                onClick={handleLogout}
+                className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+              >
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <button 
+              onClick={() => setShowLoginForm(true)}
+              className="w-full py-4 bg-accent text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:brightness-110"
+            >
+              Access Orion Console
+            </button>
+          )}
         </div>
       </aside>
 
@@ -357,8 +379,8 @@ function GradLaunchContent() {
           <div className="max-w-7xl mx-auto h-full animate-fade-in">
             <Routes>
               <Route path="/" element={<Dashboard savedJobs={savedJobs} profileText={profileText} />} />
-              <Route path="/jobs" element={<JobSearch onAddToTracker={handleAddToTracker} onToggleSave={handleToggleSave} savedJobs={savedJobs} profileText={profileText} />} />
-              <Route path="/jobs/:id" element={<JobView onAddToTracker={handleAddToTracker} />} />
+              <Route path="/jobs" element={<JobSearch currentUser={currentUser} onAddToTracker={handleAddToTracker} onToggleSave={handleToggleSave} savedJobs={savedJobs} profileText={profileText} />} />
+              <Route path="/jobs/:id" element={<JobView currentUser={currentUser} onAddToTracker={handleAddToTracker} />} />
               <Route path="/copilot" element={<Copilot />} />
               <Route path="/resume" element={<ResumeTailor initialJobDesc={prefilledJob.description} jobUrl={prefilledJob.link} globalContext={globalProfileContext} />} />
               <Route path="/tracker" element={<AppTracker applications={applications} setApplications={setApplications} />} />
@@ -393,3 +415,5 @@ export default function GradLaunch() {
     </ErrorBoundary>
   );
 }
+
+ 

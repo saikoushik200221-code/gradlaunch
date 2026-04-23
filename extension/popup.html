@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>GradLaunch Copilot</title>
+    <style>
+        body {
+            width: 320px;
+            padding: 16px;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: #0a0a0a;
+            color: #fff;
+            margin: 0;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .logo {
+            font-weight: 800;
+            font-size: 20px;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #c8ff00 0%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .tag {
+            margin-left: auto;
+            font-size: 10px;
+            padding: 3px 6px;
+            border: 1px solid rgba(200,255,0,0.3);
+            color: #c8ff00;
+            border-radius: 999px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .status-card {
+            background: #111;
+            border: 1px solid #1f1f1f;
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 14px;
+        }
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            padding: 6px 0;
+            color: #a1a1aa;
+        }
+        .status-row span:last-child {
+            font-weight: 600;
+        }
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 11px;
+            background: linear-gradient(135deg, #c8ff00 0%, #8b5cf6 100%);
+            color: #0a0a0a;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            text-align: center;
+            font-weight: 700;
+            text-decoration: none;
+            font-size: 13px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            box-sizing: border-box;
+            margin-bottom: 8px;
+        }
+        .btn:hover { filter: brightness(1.08); }
+        .btn-ghost {
+            background: transparent;
+            color: #a1a1aa;
+            border: 1px solid #27272a;
+        }
+        .btn-ghost:hover {
+            color: #fff;
+            border-color: #52525b;
+        }
+        .footer {
+            margin-top: 10px;
+            font-size: 11px;
+            color: #52525b;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">GradLaunch</div>
+        <span class="tag">Copilot</span>
+    </div>
+    <div class="status-card" id="status-card">
+        <div class="status-row">
+            <span>ATS Detected</span>
+            <span id="ats-type">—</span>
+        </div>
+        <div class="status-row">
+            <span>Login Status</span>
+            <span id="login-status">Checking…</span>
+        </div>
+    </div>
+    <button id="open-dashboard" class="btn">Open Dashboard</button>
+    <button id="logout-btn" class="btn btn-ghost">Sign Out</button>
+    <div class="footer">v1.1.0 · Greenhouse · Lever · Ashby · Workday · iCIMS · Workable</div>
+    <script src="popup.js"></script>
+</body>
+</html>

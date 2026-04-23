@@ -10,6 +10,8 @@ export default function ResumeTailor({ initialJobDesc, globalContext }) {
     const [atsScore, setAtsScore] = useState(null);
     const [keywords, setKeywords] = useState([]);
     const [error, setError] = useState("");
+    const [coverLetter, setCoverLetter] = useState("");
+    const [generatingCL, setGeneratingCL] = useState(false);
 
     const [matchAnalysis, setMatchAnalysis] = useState(null);
     const [analyzingMatch, setAnalyzingMatch] = useState(false);
@@ -19,6 +21,7 @@ export default function ResumeTailor({ initialJobDesc, globalContext }) {
     const [improving, setImproving] = useState(false);
 
     const [background, setBackground] = useState(globalContext || "");
+    const [intensity, setIntensity] = useState("balanced"); // keywords | balanced | impact
 
     useEffect(() => {
         if (globalContext && (!background || background.trim() === "")) {
@@ -49,10 +52,10 @@ export default function ResumeTailor({ initialJobDesc, globalContext }) {
         setKeywords([]);
         try {
             const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
-            const res = await fetch(`${apiBase}/api/ai/optimize`, { // Re-using optimize endpoint for full rewrite too
+            const res = await fetch(`${apiBase}/api/ai/optimize`, { 
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("token")}` },
-                body: JSON.stringify({ resume: background, jobDescription: jobDesc, fullRewrite: true })
+                body: JSON.stringify({ resume: background, jobDescription: jobDesc, fullRewrite: true, intensity })
             });
             const data = await res.json();
             setTailored(data.tailoredResume || "Analysis complete. See optimization tips below.");
@@ -141,6 +144,22 @@ export default function ResumeTailor({ initialJobDesc, globalContext }) {
         doc.save("Tailored_Resume.pdf");
     }
 
+    async function generateCoverLetter() {
+        if (!background || !jobDesc) return;
+        setGeneratingCL(true);
+        try {
+            const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
+            const res = await fetch(`${apiBase}/api/ai/cover-letter`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("token")}` },
+                body: JSON.stringify({ resume: background, jobDescription: jobDesc, role: initialJobDesc?.title, company: initialJobDesc?.company })
+            });
+            const data = await res.json();
+            setCoverLetter(data.coverLetter);
+        } catch (e) { setError("Failed to generate cover letter."); }
+        setGeneratingCL(false);
+    }
+
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-[calc(100vh-160px)]">
             {/* Left Column: Editor Workspace */}
@@ -180,6 +199,30 @@ export default function ResumeTailor({ initialJobDesc, globalContext }) {
 
                     {error && <div className="mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-500 text-xs font-bold">{error}</div>}
 
+                    <div className="mt-8">
+                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted mb-4 block">Tailoring Strategy</label>
+                        <div className="flex gap-2 p-1.5 bg-card/60 rounded-2xl border border-border/50">
+                            {[
+                                { id: 'keywords', label: 'ATS Keywords', icon: '🎯' },
+                                { id: 'balanced', label: 'Balanced', icon: '⚖️' },
+                                { id: 'impact', label: 'High Impact', icon: '🔥' }
+                            ].map(mode => (
+                                <button
+                                    key={mode.id}
+                                    onClick={() => setIntensity(mode.id)}
+                                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                                        intensity === mode.id 
+                                            ? 'bg-accent text-black shadow-lg shadow-accent/20' 
+                                            : 'text-muted hover:text-white'
+                                    }`}
+                                >
+                                    <span>{mode.icon}</span>
+                                    <span>{mode.label}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4 mt-10">
                         <button
                             onClick={() => analyzeDeepMatch()}
@@ -213,9 +256,14 @@ export default function ResumeTailor({ initialJobDesc, globalContext }) {
                         </div>
                     </div>
                     {tailored && (
-                        <button onClick={downloadAsPDF} className="bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 px-6 py-2 rounded-xl text-green-500 font-black text-[10px] uppercase tracking-widest transition-all">
-                            Export PDF
-                        </button>
+                        <div className="flex gap-2">
+                            <button onClick={generateCoverLetter} disabled={generatingCL} className="bg-purple/10 hover:bg-purple/20 border border-purple/30 px-6 py-2 rounded-xl text-purple font-black text-[10px] uppercase tracking-widest transition-all">
+                                {generatingCL ? "Writing..." : "Generate Cover Letter"}
+                            </button>
+                            <button onClick={downloadAsPDF} className="bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 px-6 py-2 rounded-xl text-green-500 font-black text-[10px] uppercase tracking-widest transition-all">
+                                Export PDF
+                            </button>
+                        </div>
                     )}
                 </div>
 
@@ -271,6 +319,16 @@ export default function ResumeTailor({ initialJobDesc, globalContext }) {
                     )}
 
                     <div className="relative">
+                        {coverLetter && (
+                            <div className="bg-purple/5 border border-purple/20 rounded-3xl p-8 mb-10 animate-slide-up">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="font-syne text-lg font-black text-purple uppercase tracking-tight">Tailored Cover Letter</h3>
+                                    <button onClick={() => setCoverLetter("")} className="text-muted hover:text-white text-xs">✕ Close</button>
+                                </div>
+                                <pre className="text-xs text-white/90 whitespace-pre-wrap leading-relaxed italic">{coverLetter}</pre>
+                            </div>
+                        )}
+
                         {tailored ? (
                             <ResumeDiffView
                                 originalResume={background}

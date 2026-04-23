@@ -4,7 +4,7 @@ import { Helmet } from "react-helmet-async";
 import { TagBadge, LogoCircle, MatchBadgeLarge, MatchChanceBadge, AssistantBubble } from "./Common";
 import MatchBreakdown from "./MatchBreakdown";
 
-export default function JobView({ onAddToTracker }) {
+export default function JobView({ currentUser, onAddToTracker }) {
     const { id } = useParams();
     const navigate = useNavigate();
     const [job, setJob] = useState(null);
@@ -30,7 +30,7 @@ export default function JobView({ onAddToTracker }) {
     }, [id]);
 
     async function analyzeFit() {
-        if (!job) return;
+        if (!job || !currentUser) return;
         setAnalyzing(true);
         setAnalysisError(null);
         try {
@@ -133,11 +133,11 @@ export default function JobView({ onAddToTracker }) {
                         {!analysis && !analyzing && (
                             <div className="space-y-6">
                                 <p className="text-muted text-[11px] font-bold italic leading-relaxed">
-                                    System is awaiting deep semantic alignment analysis...
+                                    {currentUser ? "System is awaiting deep semantic alignment analysis..." : "Sign in to access deep semantic match insights..."}
                                 </p>
                                 <button onClick={analyzeFit} disabled={analyzing}
                                     className="w-full bg-accent/10 border border-accent/30 text-accent py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-accent hover:text-black transition-all disabled:opacity-50">
-                                    ✨ Generate AI Insight
+                                    {currentUser ? "✨ Generate AI Insight" : "🔑 Login to Unlock"}
                                 </button>
                                 {analysisError && (
                                     <p className="text-[11px] text-pink-400 italic">{analysisError}</p>

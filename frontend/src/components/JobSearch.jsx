@@ -582,8 +582,12 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                                 className="w-full bg-accent/10 border border-accent/20 rounded-[2.5rem] p-10 group hover:bg-accent/20 transition-all active:scale-[0.99]"
                             >
                                 <div className="text-4xl mb-4 group-hover:scale-125 transition-transform duration-500 origin-center">🧠</div>
-                                <h3 className="text-[10px] font-black text-accent uppercase tracking-[0.4em] mb-2">Initialize Deep Intelligence</h3>
-                                <p className="text-[11px] text-muted italic font-medium">Map keyword gaps, match scores, and sponsorship intel...</p>
+                                <h3 className="text-[10px] font-black text-accent uppercase tracking-[0.4em] mb-2">
+                                    {currentUser ? "Initialize Deep Intelligence" : "Login for Deep Intelligence"}
+                                </h3>
+                                <p className="text-[11px] text-muted italic font-medium">
+                                    {currentUser ? "Map keyword gaps, match scores, and sponsorship intel..." : "Get personalized match scores, gap analysis, and tailored resumes."}
+                                </p>
                                 {analyzing && <div className="mt-6 h-1 w-full bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-accent animate-shimmer w-1/2" /></div>}
                             </button>
                         ) : (
@@ -679,7 +683,7 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                         </section>
                     </div>
 
-                    {/* ✨ Sticky Action Footer */}
+                    {/* Sticky Action Footer */}
                     <div className="p-8 pb-10 bg-surface/90 border-t border-border backdrop-blur-xl flex flex-col md:flex-row gap-4 absolute bottom-0 left-0 w-full z-10 shadow-[0_-20px_40px_rgba(0,0,0,0.5)]">
                         <button
                             onClick={() => onAddToTracker({ ...selectedJob, optimize: true })}
@@ -717,7 +721,6 @@ export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, pro
                     stage={stage}
                     error={modalError}
                     onRetry={() => {
-                        // Resumes from where it failed roughly
                         if (!deepAnalysis) analyzeFitDeep();
                         else if (!tailoredResume) handleTailor(deepAnalysis);
                         else handleFinalDispatch();

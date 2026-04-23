@@ -805,6 +805,7 @@ function calculateGenuinessScore(job) {
     // Source checks
     if (job.source === 'Lever') score += 25;      // Direct employer boards are trusted
     else if (job.source === 'Greenhouse') score += 25;
+    else if (job.source === 'Google Jobs') score += 20; // High quality from Apify
     else if (job.source === 'Adzuna') score += 10; // Aggregator - less direct
 
     // Company checks
@@ -943,12 +944,75 @@ async function fetchGreenhouseJobs() {
     return jobs;
 }
 
+async function fetchApifyJobs() {
+    const token = process.env.APIFY_API_KEY;
+    if (!token) return [];
+    
+    console.log('[Scraper] Triggering Apify Google Jobs Scraper...');
+    const queries = [
+        "Software Engineer New Grad USA",
+        "Frontend Developer Entry Level USA",
+        "Backend Developer Junior USA",
+        "Data Scientist New Grad USA",
+        "Machine Learning Engineer Entry Level USA",
+        "Cyber Security Analyst Junior USA",
+        "Product Manager New Grad USA",
+        "UX Designer Entry Level USA",
+        "Systems Engineer New Grad USA",
+        "DevOps Engineer Junior USA"
+    ];
+
+    let allJobs = [];
+    
+    try {
+        const { data } = await axios.post(`https://api.apify.com/v2/acts/apify~google-jobs-scraper/run-sync-get-dataset-items?token=${token}`, {
+            queries: queries.join('\n'),
+            maxPagesPerQuery: 1,
+            maxResultsPerQuery: 20,
+            searchRegion: "United States"
+        }, { timeout: 120000 });
+
+        if (Array.isArray(data)) {
+            data.forEach(item => {
+                if (!item.title || !item.companyName) return;
+                
+                allJobs.push({
+                    id: `apf-${item.jobId || crypto.createHash('md5').update(item.title + item.companyName).digest('hex')}`,
+                    title: item.title,
+                    company: item.companyName,
+                    location: item.location || "Remote",
+                    type: "Full-time",
+                    postedValue: item.postedAt ? new Date(item.postedAt).getTime() : Date.now(),
+                    posted: item.postedAt ? getPostedTime(item.postedAt) : "Recently",
+                    salary: item.salary || 'Competitive',
+                    tags: generateTags(item.title, item.description || "", item.location || "Remote"),
+                    logo: item.companyName.charAt(0).toUpperCase(),
+                    match: getMatchScore(item.title),
+                    description: (item.description || "").substring(0, 5000),
+                    skills: extractSkills(item.title, item.description || ""),
+                    link: item.applyLink || item.url,
+                    source: 'Google Jobs'
+                });
+            });
+        }
+        console.log(`[Scraper] Apify found ${allJobs.length} potential jobs.`);
+    } catch (err) {
+        console.error('[Scraper] Apify fetch error:', err.message);
+    }
+    return allJobs;
+}
+
 async function runJobScraper() {
     if (isScraping) return;
     isScraping = true;
+    console.log('[Scraper] Starting global job sync...');
     try {
-        const [leverJobs, greenhouseJobs] = await Promise.all([fetchLeverJobs(), fetchGreenhouseJobs()]);
-        const allRaw = [...leverJobs, ...greenhouseJobs].filter(job => isUSJob(job) && isGenuineJob(job));
+        const [leverJobs, greenhouseJobs, apifyJobs] = await Promise.all([
+            fetchLeverJobs(), 
+            fetchGreenhouseJobs(),
+            fetchApifyJobs()
+        ]);
+        const allRaw = [...leverJobs, ...greenhouseJobs, ...apifyJobs].filter(job => isUSJob(job) && isGenuineJob(job));
         const existing = await db.all('SELECT id FROM jobs');
         const existingIds = new Set(existing.map(e => e.id));
         const newJobs = allRaw.filter(j => !existingIds.has(j.id));
@@ -974,7 +1038,7 @@ async function runJobScraper() {
 }
 
 setTimeout(runJobScraper, 5000);
-setInterval(runJobScraper, 30 * 60 * 1000);
+setInterval(runJobScraper, 15 * 60 * 1000); // Updated to 15 min as requested
 
 app.get('/api/jobs', async (req, res) => {
     try {
@@ -1100,6 +1164,38 @@ app.get('/api/jobs/verified', async (req, res) => {
     } catch (e) {
         console.error('[Jobs/Verified] Error:', e);
         res.status(500).json({ error: 'Failed to fetch verified jobs' });
+    }
+});
+
+/**
+ * GET /api/jobs/recommended
+ * Intelligent recommendation engine for the dashboard
+ * Returns top 5 semantic matches based on resume profile
+ */
+app.get('/api/jobs/recommended', authenticateToken, async (req, res) => {
+    try {
+        const user = await db.get('SELECT resume_data FROM users WHERE id = ?', [req.user.id]);
+        if (!user || !user.resume_data) {
+            // Fallback to verified jobs if no resume
+            const rows = await db.all('SELECT * FROM jobs WHERE is_trusted = 1 ORDER BY posted_value DESC LIMIT 5');
+            return res.json({ dailyJobs: rows.map(r => ({ ...r, match_score: 75, tags: JSON.parse(r.tags) })) });
+        }
+
+        const resumeData = JSON.parse(user.resume_data);
+        const jobs = await db.all('SELECT * FROM jobs ORDER BY posted_value DESC LIMIT 100');
+
+        const matchedJobs = await matchingEngine.findMatchingJobs(
+            req.user.id,
+            jobs,
+            resumeData,
+            5,
+            abTestingService
+        );
+
+        res.json({ dailyJobs: matchedJobs });
+    } catch (error) {
+        console.error('[Recommended] Error:', error);
+        res.status(500).json({ error: 'Recommendation engine failed' });
     }
 });
 
@@ -1534,6 +1630,42 @@ app.post('/api/ai/analyze-job', authenticateToken, async (req, res) => {
         res.status(500).json({ error: 'Analysis failed: ' + e.message });
     }
 });
+
+/**
+ * POST /api/hybrid/prefill
+ * Extension-facing endpoint to get prefill data for an ATS page
+ */
+app.post('/api/hybrid/prefill', authenticateToken, async (req, res) => {
+    const { url, html } = req.body;
+    const userId = req.user.id;
+
+    try {
+        const user = await db.get('SELECT profile, resume_data FROM users WHERE id = ?', [userId]);
+        const userProfile = user.resume_data ? JSON.parse(user.resume_data) : (user.profile ? JSON.parse(user.profile) : {});
+
+        const result = await dispatchApplication(db, { 
+            userId, 
+            tier: 2, 
+            jobUrl: url, 
+            userProfile 
+        });
+
+        if (result.status === 'prefill_ready') {
+            res.json({ 
+                success: true, 
+                ats: result.logs[0].metadata?.ats,
+                fields: result.payload.fields,
+                questions: result.payload.questions 
+            });
+        } else {
+            res.json({ success: false, error: 'Could not prepare prefill' });
+        }
+    } catch (e) {
+        console.error('[HybridPrefill] Error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 
 /**
  * POST /api/ai/auto-fix
@@ -2164,13 +2296,14 @@ app.post('/api/anthropic/messages', async (req, res) => {
  * CRITICAL: This endpoint was missing and causing ResumeTailor to fail
  */
 app.post('/api/ai/optimize', aiLimiter, authenticateToken, async (req, res) => {
-    const { resume, jobDescription, bulletOnly = false, mode = 'full' } = req.body;
+    const { resume, jobDescription, bulletOnly = false, intensity = 'balanced' } = req.body;
 
     if (!resume) return res.status(400).json({ error: 'Resume text required' });
     if (!jobDescription) return res.status(400).json({ error: 'Job description required' });
 
     try {
         const user = await db.get('SELECT name, skills FROM users WHERE id = ?', [req.user.id]);
+        
         let tailoredResume = resume;
         let improvedBullet = '';
         let keywords = [];
@@ -2178,138 +2311,86 @@ app.post('/api/ai/optimize', aiLimiter, authenticateToken, async (req, res) => {
         let tips = [];
         let add = [];
 
+        // Intensity-based prompt modifiers
+        const intensityMap = {
+            'keywords': 'Focus AGGRESSIVELY on keyword injection for ATS optimization. Use exactly the vocabulary from the JD.',
+            'balanced': 'Maintain a professional balance between keyword optimization and human readability.',
+            'impact': 'Focus on QUANTIFIABLE IMPACT. Reframe every possible bullet to include metrics (%, $, time) based on the context.'
+        };
+
         // Extract keywords from job description
         const jdLower = jobDescription.toLowerCase();
         const techKeywords = [
             'react', 'vue', 'angular', 'node.js', 'python', 'java', 'go', 'typescript', 'javascript',
             'sql', 'aws', 'docker', 'kubernetes', 'graphql', 'redis', 'mongodb', 'postgresql',
             'terraform', 'ci/cd', 'rest', 'api', 'microservices', 'agile', 'scrum', 'git',
-            'linux', 'c++', 'rust', 'swift', 'kotlin', 'flutter', 'django', 'flask'
+            'linux', 'c++', 'rust', 'swift', 'kotlin', 'flutter', 'django', 'flask', 'snowflake',
+            'spark', 'hadoop', 'jenkins', 'github actions', 'jira', 'confluence', 'pytorch', 'tensorflow'
         ];
-        keywords = techKeywords.filter(k => jdLower.includes(k)).slice(0, 10);
+        keywords = techKeywords.filter(k => jdLower.includes(k)).slice(0, 15);
 
-        // Calculate initial ATS score
-        const hasBullets = resume.match(/^[-•*]\s/gm);
-        const hasMetrics = resume.match(/\d+%|\d+x|\$\d+k?|\d+\+/g);
-        const hasKeywords = keywords.filter(k => resume.toLowerCase().includes(k)).length;
-
-        score = 40; // baseline
-        score += hasBullets ? 15 : 0;
-        score += (hasMetrics?.length || 0) * 3;
-        score += hasKeywords * 5;
-        score = Math.min(100, score);
-
-        // Mode-specific logic
         if (bulletOnly) {
-            // Enhanced bullet point optimization only
             if (GEMINI_API_KEY) {
                 try {
                     const { GoogleGenerativeAI } = require('@google/generative-ai');
                     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
                     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-                    const prompt = `Improve this single resume bullet point for ATS and impact. Make it measurement-driven and concise.
+                    const prompt = `You are a FAANG Recruiter. Improve this single resume bullet point using the STAR method (Situation, Task, Action, Result).
                     
 Original bullet: "${resume}"
+Target JD Context: "${jobDescription.substring(0, 300)}"
+Optimization Strategy: ${intensityMap[intensity] || intensityMap['balanced']}
 
-Return ONLY the improved bullet (max 20 words), no explanation.`;
+Return ONLY the improved bullet point. Be concise (max 25 words). No preamble.`;
 
                     const result = await model.generateContent(prompt);
                     improvedBullet = result.response.text().trim();
-                } catch (e) {
-                    console.error('[AI/Optimize] Gemini error:', e.message);
-                    improvedBullet = resume.replace(/led/i, 'Spearheaded').replace(/helped/i, 'Engineered');
-                }
-            } else {
-                improvedBullet = resume
-                    .replace(/led/i, 'Spearheaded')
-                    .replace(/helped/i, 'Engineered')
-                    .replace(/designed/i, 'Architected');
+                } catch (e) { improvedBullet = resume; }
             }
         } else {
-            // Full resume tailoring with AI
             if (GEMINI_API_KEY) {
                 try {
                     const { GoogleGenerativeAI } = require('@google/generative-ai');
                     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
                     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-                    const prompt = `You are an expert resume writer. Tailor this resume for this specific job while maintaining 100% accuracy about the candidate's actual experience. DO NOT fabricate or exaggerate.
+                    const prompt = `You are an expert Resume Strategist. Tailor this resume to the following job description.
 
-RESUME:
+--- BASES RESUME ---
 ${resume}
 
-TARGET JOB:
-${jobDescription.substring(0, 1000)}
+--- TARGET JOB DESCRIPTION ---
+${jobDescription.substring(0, 1500)}
 
-INSTRUCTIONS:
-1. Keep all factual information accurate
-2. Reorder/emphasize relevant skills and experience
-3. Add industry keywords naturally
-4. Improve action verbs in bullets
-5. Add/emphasize quantifiable metrics only if they exist in original resume
-6. Format as professional resume
-7. Return ONLY the tailored resume, no explanations
+--- TAILORING PROTOCOL ---
+1. STRATEGIC SUMMARY: Rewrite the summary to be a "Value Proposition". Narrate why the candidate's unique mix of projects and experience is a 1:1 match for this role.
+2. PROJECT PROMOTION: If the candidate's 'Projects' section contains technologies mentioned in the JD that are NOT in their 'Experience' section, PRIORITIZE the Projects. Make them sound like production-level work.
+3. INTENSITY: ${intensityMap[intensity] || intensityMap['balanced']}
+4. KEYWORDS: Ensure these terms are integrated naturally: ${keywords.join(', ')}
+5. STRUCTURE: Preserve section headers. Use a clean, modern layout.
+6. STAR METHOD: Every bullet MUST follow (Action -> Result). Use metrics if provided.
+7. HONESTY: Do NOT invent experience. Reframe only.
 
-CRITICAL: Do NOT add fake experience or false metrics.`;
+Return the FULL tailored resume text. No intro, no outro, no markdown formatting (pure text).`;
 
                     const result = await model.generateContent(prompt);
                     tailoredResume = result.response.text().trim();
-
-                    // Recalculate ATS score for optimized version
-                    const hasOptBullets = tailoredResume.match(/^[-•*]\s/gm);
-                    const hasOptMetrics = tailoredResume.match(/\d+%|\d+x|\$\d+k?|\d+\+/g);
-                    const hasOptKeywords = keywords.filter(k => tailoredResume.toLowerCase().includes(k)).length;
-
-                    score = 40;
-                    score += hasOptBullets ? 20 : 0;
-                    score += (hasOptMetrics?.length || 0) * 3;
-                    score += hasOptKeywords * 5;
-                    score = Math.min(100, score);
-
-                    // Generate suggested additions
-                    add = [];
-                    const missingSkills = keywords.filter(k => !tailoredResume.toLowerCase().includes(k)).slice(0, 3);
-                    if (missingSkills.length > 0) {
-                        add.push(`Consider highlighting experience with: ${missingSkills.join(', ')}`);
-                    }
-                    if (score < 80) {
-                        add.push('Add quantifiable metrics (%, $, numbers) to at least 3 bullet points');
-                    }
-
-                } catch (e) {
-                    console.error('[AI/Optimize] Gemini error:', e.message);
-                    // Fallback: Basic improvement
-                    tailoredResume = resume;
-                }
-            }
-
-            // Generate optimization tips
-            if (!bulletOnly) {
-                tips = [];
-                const resumeLower = resume.toLowerCase();
-
-                if (score < 70) tips.push('Add more quantifiable metrics (%, $, numbers) to your bullets');
-                if (hasKeywords < 3) tips.push(`Incorporate these keywords: ${keywords.slice(0, 3).join(', ')}`);
-                if (!hasBullets) tips.push('Use bullet points for better ATS readability');
-
-                // Generate bullet suggestions
-                add = [];
-                if (keywords.length > 0) {
-                    const missing = keywords.filter(k => !resume.toLowerCase().includes(k)).slice(0, 2);
-                    if (missing.length > 0) {
-                        add.push(`✓ Highlight ${missing[0]} expertise in your experience section`);
-                        if (missing[1]) add.push(`✓ Weave in ${missing[1]} to demonstrate technical breadth`);
-                    }
-                }
-                if (score < 70) {
-                    add.push('✓ Add quantifiable impact metrics to strengthen bullet points');
-                }
-                if (add.length === 0) {
-                    add.push('✓ Your resume is well-structured. Focus on tailoring for this specific role.');
-                }
+                } catch (e) { tailoredResume = resume; }
             }
         }
+
+        // Calculate ATS score for the RESULT
+        const checkText = bulletOnly ? improvedBullet : tailoredResume;
+        const hasBullets = checkText.match(/^[-•*]\s/gm);
+        const hasMetrics = checkText.match(/\d+%|\d+x|\$\d+k?|\d+\+/g);
+        const hasKeywords = keywords.filter(k => checkText.toLowerCase().includes(k)).length;
+
+        score = 30; // baseline
+        score += hasBullets ? 20 : 0;
+        score += Math.min(25, (hasMetrics?.length || 0) * 5);
+        score += Math.min(25, (hasKeywords / (keywords.length || 1)) * 25);
+        score = Math.round(score);
 
         res.json({
             success: true,
@@ -2317,8 +2398,8 @@ CRITICAL: Do NOT add fake experience or false metrics.`;
             improvedBullet,
             score,
             keywords,
-            tips,
-            add,
+            tips: score < 80 ? ['Add more metrics', 'Inject missing keywords'] : ['Resume looks strong'],
+            add: keywords.filter(k => !checkText.toLowerCase().includes(k)).map(k => `Add ${k}`),
             atsScore: score,
             keywordMatches: hasKeywords,
             metricsCount: hasMetrics?.length || 0,
@@ -2421,6 +2502,48 @@ Be honest about fit. Return ONLY the analysis, no intro.`;
     } catch (e) {
         console.error('[AI/Match] Error:', e);
         res.status(500).json({ error: 'Match analysis failed: ' + e.message });
+    }
+});
+
+/**
+ * POST /api/ai/cover-letter
+ * Generate a highly tailored cover letter based on resume and JD
+ */
+app.post('/api/ai/cover-letter', aiLimiter, authenticateToken, async (req, res) => {
+    const { resume, jobDescription, company, role } = req.body;
+    if (!resume || !jobDescription) return res.status(400).json({ error: 'Missing inputs' });
+
+    try {
+        if (GEMINI_API_KEY) {
+            const { GoogleGenerativeAI } = require('@google/generative-ai');
+            const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+            const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+            const prompt = `You are a world-class career coach. Write a compelling, punchy cover letter for this candidate.
+            
+ROLE: ${role || 'Software Engineer'}
+COMPANY: ${company || 'this company'}
+
+RESUME CONTEXT:
+${resume.substring(0, 2000)}
+
+JOB DESCRIPTION:
+${jobDescription.substring(0, 1000)}
+
+INSTRUCTIONS:
+1. Tone: Professional, enthusiastic, and evidence-based.
+2. Structure: 3-4 paragraphs (Hook, Evidence/Projects, Culture Fit, Call to Action).
+3. Focus: Connect specific projects from the resume to the specific needs of the JD.
+4. Avoid: Cliches like "To whom it may concern" or "I am a hard worker".
+5. Return ONLY the cover letter text.`;
+
+            const result = await model.generateContent(prompt);
+            res.json({ success: true, coverLetter: result.response.text().trim() });
+        } else {
+            res.json({ success: false, error: 'AI key not configured' });
+        }
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to generate cover letter' });
     }
 });
 

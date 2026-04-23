@@ -1,0 +1,92 @@
+{
+  "manifest_version": 3,
+  "name": "GradLaunch Copilot",
+  "version": "1.1.0",
+  "description": "AI-powered job application assistant for GradLaunch — auto-fills Greenhouse, Lever, Ashby, Workday, iCIMS, and Workable.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.greenhouse.io/*",
+    "https://job-boards.greenhouse.io/*",
+    "https://boards.greenhouse.io/*",
+    "https://*.lever.co/*",
+    "https://*.ashbyhq.com/*",
+    "https://*.myworkdayjobs.com/*",
+    "https://*.icims.com/*",
+    "https://*.workable.com/*",
+    "https://apply.workable.com/*",
+    "http://localhost:3001/*",
+    "https://gradlaunch-api.onrender.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.greenhouse.io/*",
+        "https://boards.greenhouse.io/*",
+        "https://job-boards.greenhouse.io/*"
+      ],
+      "js": ["content/_common.js", "content/greenhouse.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://jobs.lever.co/*"],
+      "js": ["content/_common.js", "content/lever.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://jobs.ashbyhq.com/*",
+        "https://*.ashbyhq.com/*"
+      ],
+      "js": ["content/_common.js", "content/ashby.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.myworkdayjobs.com/*"],
+      "js": ["content/_common.js", "content/workday.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.icims.com/*",
+        "https://careers-*.icims.com/*"
+      ],
+      "js": ["content/_common.js", "content/icims.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://apply.workable.com/*",
+        "https://*.workable.com/*"
+      ],
+      "js": ["content/_common.js", "content/workable.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "externally_connectable": {
+    "matches": [
+      "http://localhost:5173/*",
+      "https://gradlaunch.vercel.app/*"
+    ]
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["content/_common.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

@@ -59,6 +59,7 @@ export default function Dashboard({ savedJobs, profileText, currentUser }) {
     const [loading, setLoading] = useState(true);
     const [curatedJobs, setCuratedJobs] = useState([]);
     const [loadingCurated, setLoadingCurated] = useState(true);
+    const [personalization, setPersonalization] = useState(null);
 
     useEffect(() => {
         async function fetchAnalytics() {
@@ -82,7 +83,15 @@ export default function Dashboard({ savedJobs, profileText, currentUser }) {
             } catch (e) { console.error("Recommended fetch failed", e); }
             setLoadingCurated(false);
         }
-        fetchAnalytics(); fetchRecommended();
+        async function fetchPersonalization() {
+            try {
+                const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/personalization/preferences`, {
+                    headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+                });
+                if (res.ok) setPersonalization(await res.json());
+            } catch (e) { console.error("Personalization fetch failed", e); }
+        }
+        fetchAnalytics(); fetchRecommended(); fetchPersonalization();
     }, []);
 
     const s = data?.summary || { total: 0, offers: 0, interviews: 0, rejections: 0, successRate: 0, avgMatchScore: 78 };
@@ -144,25 +153,53 @@ export default function Dashboard({ savedJobs, profileText, currentUser }) {
 
                     {/* Assistant Insight (Decision Engine) */}
                     <AssistantBubble 
-                        message={s.total < 5 ? 
-                            "Intelligence Engine Warm-up: Apply to 5 more 'HIGH Confidence' roles to unlock personalized rejection analysis." : 
-                            "Strategy Shift Detected: Your conversion on Lever/Greenhouse roles is 3x higher than Workday. Prioritize Direct-API targets."}
-                        actionLabel="View High Match Roles"
-                        onAction={() => navigate('/jobs')}
+                        message={personalization?.strongBullets?.length > 0 ? 
+                            `Intelligence Update: Your "${personalization.preferredTone}" tone is resonating. I've mapped ${personalization.totalAccepted} successful optimizations to your profile.` : 
+                            "Intelligence Engine Warm-up: Apply to 5 more 'HIGH Confidence' roles to unlock personalized rejection analysis."}
+                        actionLabel="Refine Resume Strategy"
+                        onAction={() => navigate('/resume')}
                     />
 
-                    {/* Tactical Gaps Dashboard */}
-                    <div className="bg-pink-500/5 border border-pink-500/10 rounded-[2.5rem] p-10 space-y-6">
-                        <h4 className="text-[10px] font-black text-pink-400 uppercase tracking-[0.4em]">Critical Strategy Gaps</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="flex items-center gap-3 text-xs font-bold text-white/70 italic">
-                                <span className="text-pink-400">⚠️</span> Missing "Kubernetes" in 4 target descriptions
+                    {/* 🧠 Personalization Intelligence Card */}
+                    {personalization && (
+                        <div className="bg-gradient-to-br from-purple/10 to-accent/5 border border-white/10 rounded-[2.5rem] p-10 space-y-8 backdrop-blur-2xl relative overflow-hidden group">
+                            <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-purple/10 blur-[80px] group-hover:bg-purple/20 transition-all" />
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h4 className="text-[10px] font-black text-accent uppercase tracking-[0.4em] mb-2">Neural Learning Profile</h4>
+                                    <h3 className="font-syne text-xl font-black text-white uppercase tracking-tight">AI Tailoring Insights</h3>
+                                </div>
+                                <div className="bg-white/5 px-4 py-2 rounded-xl border border-white/10">
+                                    <span className="text-[10px] font-black text-muted uppercase">Maturity: </span>
+                                    <span className="text-sm font-black text-white">{personalization.learningMaturity}%</span>
+                                </div>
                             </div>
-                            <div className="flex items-center gap-3 text-xs font-bold text-white/70 italic">
-                                <span className="text-pink-400">⚠️</span> Resume v1 lacks "Scalability" metrics
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div className="space-y-4">
+                                    <p className="text-[10px] font-black text-muted uppercase tracking-widest">Winning Patterns</p>
+                                    <div className="space-y-3">
+                                        {personalization.strongBullets?.slice(0, 2).map((b, i) => (
+                                            <div key={i} className="text-[11px] text-white/80 leading-relaxed italic border-l-2 border-accent/40 pl-4 py-1">
+                                                "{b.substring(0, 80)}..."
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="space-y-4">
+                                    <p className="text-[10px] font-black text-muted uppercase tracking-widest">Avoided Logic</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {Object.keys(personalization.avoidPatterns || {}).map(p => (
+                                            <span key={p} className="bg-pink-500/10 border border-pink-500/20 text-pink-400 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg">
+                                                {p.replace('_', ' ')}
+                                            </span>
+                                        ))}
+                                        {Object.keys(personalization.avoidPatterns || {}).length === 0 && <span className="text-[11px] text-muted italic">No negative signals yet.</span>}
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 {/* Right Column: Top Jobs Today */}

@@ -1,56 +1,73 @@
-const { GreenhouseService } = require('./services/greenhouse');
-const greenhouseService = new GreenhouseService();
+const { detectATS, getAdapter } = require('./services/ats');
 
 async function detectATSType(url = "") {
-    const lowerUrl = url.toLowerCase();
-    
-    // Use the GreenhouseService detection as well for consistency
-    const greenhouseInfo = greenhouseService.detectGreenhouseJob(url);
-    if (greenhouseInfo) return 'greenhouse';
-    
-    if (lowerUrl.includes('lever.co')) return 'lever';
-    if (lowerUrl.includes('myworkdayjobs.com')) return 'workday';
-    if (lowerUrl.includes('ashbyhq.com')) return 'ashbyhq';
-    if (lowerUrl.includes('jobs.lever.co')) return 'lever';
-    return 'custom';
+    const result = await detectATS({ url });
+    return result ? result.adapter.name : 'custom';
 }
 
 async function dispatchApplication(db, { jobId, userId, tier, resumeId, jobUrl, userProfile }) {
     console.log(`[HybridApply] Dispatching Job ${jobId} for User ${userId} (Tier ${tier})`);
     
-    const atsType = await detectATSType(jobUrl);
+    const detection = await detectATS({ url: jobUrl });
+    const atsType = detection ? detection.adapter.name : 'custom';
+    
     const logs = [
         { step: "analyzing_portal", status: "complete", timestamp: new Date(), metadata: { ats: atsType } }
     ];
 
-    // Greenhouse Specific Real-time Orchestration
-    if (atsType === 'greenhouse' && userProfile) {
+    // Dynamic ATS Adapter Flow
+    if (detection && userProfile) {
+        const { adapter } = detection;
         logs.push({ step: "fetching_ats_metadata", status: "in_progress", timestamp: new Date() });
-        const ghData = await greenhouseService.prepareApplication(jobUrl, userProfile);
         
-        if (ghData.success) {
-            logs.push({ 
-                step: "fetching_ats_metadata", 
-                status: "complete", 
-                timestamp: new Date(), 
-                metadata: { questions_count: ghData.questions.length } 
-            });
-            logs.push({ 
-                step: "mapping_form_intelligence", 
-                status: "complete", 
-                timestamp: new Date(),
-                metadata: { mapped_fields: Object.keys(ghData.answers).length }
+        try {
+            const prefillData = await adapter.prefill({ 
+                profile: userProfile, 
+                url: jobUrl 
             });
             
-            // In a real Tier 3 scenario, we would then attempt submitApplication
-            // For now, we package it for the "Injection Payload"
-            return { 
-                status: tier === 3 ? "submitted" : "prefill_ready", 
-                logs,
-                payload: ghData 
-            };
-        } else {
-            logs.push({ step: "fetching_ats_metadata", status: "failed", timestamp: new Date(), error: ghData.error });
+            if (prefillData.success) {
+                logs.push({ 
+                    step: "fetching_ats_metadata", 
+                    status: "complete", 
+                    timestamp: new Date(), 
+                    metadata: { questions_count: prefillData.questions?.length || 0 } 
+                });
+                logs.push({ 
+                    step: "mapping_form_intelligence", 
+                    status: "complete", 
+                    timestamp: new Date(),
+                    metadata: { mapped_fields: Object.keys(prefillData.fields).length }
+                });
+                
+                // If Tier 3, we would attempt submit here
+                if (tier === 3) {
+                    logs.push({ step: "auto_submit", status: "in_progress", timestamp: new Date() });
+                    const submission = await adapter.submit({ prefilled: prefillData });
+                    logs.push({ 
+                        step: "auto_submit", 
+                        status: submission.status === 'submitted' ? 'complete' : 'failed',
+                        timestamp: new Date(),
+                        metadata: { confirmation_id: submission.confirmation_id }
+                    });
+                    
+                    return { 
+                        status: submission.status, 
+                        logs,
+                        payload: prefillData 
+                    };
+                }
+
+                return { 
+                    status: "prefill_ready", 
+                    logs,
+                    payload: prefillData 
+                };
+            } else {
+                logs.push({ step: "fetching_ats_metadata", status: "failed", timestamp: new Date(), error: prefillData.error });
+            }
+        } catch (error) {
+            logs.push({ step: "fetching_ats_metadata", status: "failed", timestamp: new Date(), error: error.message });
         }
     }
 
@@ -69,5 +86,6 @@ async function dispatchApplication(db, { jobId, userId, tier, resumeId, jobUrl, 
         return { status: "manual_guide_ready", logs };
     }
 }
+
 
 module.exports = { detectATSType, dispatchApplication };
