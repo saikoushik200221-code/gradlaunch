@@ -5,7 +5,7 @@ import SmartApplyModal from "./SmartApplyModal";
 
 import ResumeVersionManager from "./ResumeVersionManager";
 
-export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, profileText, C }) {
+export default function JobSearch({ onAddToTracker, onToggleSave, savedJobs, profileText, currentUser }) {
     const [jobs, setJobs] = useState([]);
     const [loadingJobs, setLoadingJobs] = useState(false);
     const [search, setSearch] = useState("");
