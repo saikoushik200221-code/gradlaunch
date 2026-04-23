@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Toast } from "./components/Common";
 import JobSearch from "./components/JobSearch";
+import AppShell from "./components/AppShell";
 import AppTracker from "./components/AppTracker";
 import ResumeTailor from "./components/ResumeTailor";
 import Copilot from "./components/Copilot";
@@ -278,134 +279,18 @@ function GradLaunchContent() {
 
   if (showOnboarding && currentUser) return <Onboarding onComplete={() => setShowOnboarding(false)} currentUser={currentUser} />;
 
-  const TABS = [
-    { id: "dashboard", label: "Dashboard", icon: "📊", path: "/" },
-    { id: "jobs", label: "Discovery", icon: "🔍", path: "/jobs" },
-    { id: "copilot", label: "Copilot", icon: "🤖", path: "/copilot" },
-    { id: "resume", label: "Optimizer", icon: "🪄", path: "/resume" },
-    { id: "tracker", label: "Pipeline", icon: "📋", path: "/tracker" },
-    { id: "ai-form", label: "Autofill", icon: "🪄", path: "/ai-form" },
-    { id: "profile", label: "Identity", icon: "👤", path: "/profile" },
-  ];
 
-  const dockItems = [
-    { icon: LayoutDashboard, label: "Dashboard", onClick: () => navigate("/") },
-    { icon: Search, label: "Discovery", onClick: () => navigate("/jobs") },
-    { icon: Bot, label: "Copilot", onClick: () => navigate("/copilot") },
-    { icon: FileText, label: "Optimizer", onClick: () => navigate("/resume") },
-    { icon: ClipboardList, label: "Pipeline", onClick: () => navigate("/tracker") },
-    { icon: Sparkles, label: "Autofill", onClick: () => navigate("/ai-form") },
-    { icon: UserCircle, label: "Identity", onClick: () => navigate("/profile") },
-  ];
 
-  return (
-    <div className="flex h-screen bg-background text-white font-inter overflow-hidden relative">
-      {/* Background Glows */}
-      <div className="absolute top-0 left-1/4 w-[60%] h-[60%] bg-accent/5 blur-[150px] pointer-events-none" />
-      <div className="absolute bottom-0 right-1/4 w-[40%] h-[40%] bg-purple/5 blur-[150px] pointer-events-none" />
+  if (showLoginForm) {
+    return <AuthScreen onLogin={(user, token) => {
+      localStorage.setItem("token", token);
+      setAuthToken(token);
+      setCurrentUser(user);
+      setShowLoginForm(false);
+    }} />;
+  }
 
-      {/* Sidebar Navigation */}
-      <aside 
-        className={`bg-surface border-r border-border transition-all duration-300 ease-in-out flex flex-col z-50 overflow-hidden ${sidebarOpen ? 'w-72' : 'w-0'}`}
-      >
-        <div className="p-8 flex items-center gap-4">
-          <div className="h-12 w-12 bg-accent rounded-2xl flex items-center justify-center text-black text-2xl animate-bounce-slow">🚀</div>
-          <span className="font-syne font-black text-2xl uppercase tracking-tighter whitespace-nowrap">GradLaunch</span>
-        </div>
-
-        <nav className="flex-1 px-4 space-y-1">
-          {TABS.map(t => (
-            <button 
-              key={t.id} 
-              onClick={() => navigate(t.path)} 
-              className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-syne font-black uppercase tracking-widest text-[10px] transition-all group ${currentTab === t.id ? 'bg-accent text-black shadow-[0_0_20px_rgba(200,255,0,0.2)]' : 'text-muted hover:text-white hover:bg-white/5'}`}
-            >
-              <span className={`text-lg transition-transform group-hover:scale-125 ${currentTab === t.id ? 'grayscale-0' : 'grayscale opacity-70'}`}>{t.icon}</span>
-              <span className="whitespace-nowrap">{t.label}</span>
-            </button>
-          ))}
-        </nav>
-
-        {/* User Profile / Guest Login */}
-        <div className="p-6 border-t border-border bg-card/20 mb-4 mx-4 rounded-3xl">
-          {currentUser ? (
-            <>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-accent to-purple flex items-center justify-center font-black text-black">
-                  {currentUser.name?.[0].toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold truncate leading-none mb-1 uppercase tracking-tight">{currentUser.name}</p>
-                  <p className="text-[10px] text-muted truncate italic">PRO STATUS ACTIVE</p>
-                </div>
-              </div>
-              <button 
-                onClick={handleLogout}
-                className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
-              >
-                Sign Out
-              </button>
-            </>
-          ) : (
-            <button 
-              onClick={() => setShowLoginForm(true)}
-              className="w-full py-4 bg-accent text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:brightness-110"
-            >
-              Access Orion Console
-            </button>
-          )}
-        </div>
-      </aside>
-
-      {/* Main Container */}
-      <div className="flex-1 flex flex-col min-w-0 relative">
-        <header className="h-20 border-b border-border bg-surface/80 backdrop-blur-xl flex items-center justify-between px-8 sticky top-0 z-40">
-          <div className="flex items-center gap-6">
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl transition-all">
-              {sidebarOpen ? '⇠' : '⇢'}
-            </button>
-            <div className="h-4 w-px bg-border mx-2" />
-            <span className="text-xs font-black uppercase tracking-widest text-muted">{currentTab.replace('-', ' ')}</span>
-          </div>
-          
-          <div className="flex items-center gap-6">
-            <div className="hidden md:flex items-center gap-2 bg-accent/10 border border-accent/20 rounded-full px-4 py-1.5">
-              <span className="text-[10px] font-black text-accent uppercase tracking-tighter">8.4M Jobs Analyzed Today</span>
-            </div>
-          </div>
-        </header>
-
-        <main className="flex-1 overflow-y-auto custom-scrollbar p-8 pb-32">
-          <div className="max-w-7xl mx-auto h-full animate-fade-in">
-            <Routes>
-              <Route path="/" element={<Dashboard savedJobs={savedJobs} profileText={profileText} />} />
-              <Route path="/jobs" element={<JobSearch currentUser={currentUser} onAddToTracker={handleAddToTracker} onToggleSave={handleToggleSave} savedJobs={savedJobs} profileText={profileText} />} />
-              <Route path="/jobs/:id" element={<JobView currentUser={currentUser} onAddToTracker={handleAddToTracker} />} />
-              <Route path="/copilot" element={<Copilot />} />
-              <Route path="/resume" element={<ResumeTailor initialJobDesc={prefilledJob.description} jobUrl={prefilledJob.link} globalContext={globalProfileContext} />} />
-              <Route path="/tracker" element={<AppTracker applications={applications} setApplications={setApplications} />} />
-              <Route path="/ai-form" element={
-                <React.Suspense fallback={<div className="h-screen bg-background flex items-center justify-center text-accent">Loading AI Assistant...</div>}>
-                  <AIFormFiller />
-                </React.Suspense>
-              } />
-              <Route path="/profile" element={<Profile globalContext={globalProfileContext} setGlobalContext={setGlobalProfileContext} setGlobalVector={setProfileText} currentUser={currentUser} onProfileUpdate={(p) => { if (p.name) setCurrentUser(prev => ({ ...prev, name: p.name })); showToast("Profile Authenticated!"); }} />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </div>
-        </main>
-
-        {/* Dock Navigation */}
-        <div className="absolute bottom-6 left-0 right-0 z-50 pointer-events-none">
-          <div className="pointer-events-auto">
-            <Dock items={dockItems} />
-          </div>
-        </div>
-      </div>
-
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-    </div>
-  );
+  return <AppShell currentUser={currentUser} token={authToken} onLogout={handleLogout} />;
 }
 
 export default function GradLaunch() {
