@@ -1107,38 +1107,63 @@ async function runJobScraper() {
     isScraping = true;
     console.log('[Scraper] Starting global job sync...');
     try {
+        let adzunaRaw = [];
+        if (adzunaService) {
+            console.log('[Scraper] Fetching from Adzuna API...');
+            const results = await adzunaService.searchJobs("software engineer new grad entry level", "US", { limit: 50 });
+            adzunaRaw = results.map(job => ({
+                id: `adz-${job.id}`,
+                title: job.title,
+                company: job.company,
+                location: job.location,
+                type: "Full-time",
+                postedValue: new Date(job.posted_at).getTime(),
+                posted: getPostedTime(job.posted_at),
+                salary: job.salary_max ? \`$\${Math.floor(job.salary_min/1000)}k-$\${Math.floor(job.salary_max/1000)}k\` : 'Competitive',
+                tags: generateTags(job.title, job.description, job.location),
+                logo: job.company.charAt(0).toUpperCase(),
+                match: getMatchScore(job.title),
+                description: job.description,
+                skills: extractSkills(job.title, job.description),
+                link: job.link,
+                source: 'Adzuna'
+            }));
+        }
+
         const [leverJobs, greenhouseJobs, apifyJobs] = await Promise.all([
             fetchLeverJobs(), 
             fetchGreenhouseJobs(),
             fetchApifyJobs()
         ]);
-        const allRaw = [...leverJobs, ...greenhouseJobs, ...apifyJobs].filter(job => isUSJob(job) && isGenuineJob(job));
+        const allRaw = [...leverJobs, ...greenhouseJobs, ...apifyJobs, ...adzunaRaw].filter(job => isUSJob(job) && isGenuineJob(job));
         const existing = await db.all('SELECT id FROM jobs');
         const existingIds = new Set(existing.map(e => e.id));
         const newJobs = allRaw.filter(j => !existingIds.has(j.id));
 
+        console.log(\`[Scraper] Found \${newJobs.length} new highly-vetted jobs to insert.\`);
+
         for (let j of newJobs) {
             try {
                 const s = parseSalaryRange(j.salary);
-                await db.run(`
+                await db.run(\`
                     INSERT OR IGNORE INTO jobs (
                         id, title, company, location, type, salary, salary_min, salary_max, 
                         tags, skills, description, link, posted, posted_value, logo, source, sponsorship_friendly, company_type, is_trusted
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                `, [
+                \`, [
                     j.id, j.title, j.company, j.location, j.type, j.salary, s.min, s.max,
-                    JSON.stringify(j.tags), JSON.stringify(j.skills), j.description, j.link, j.posted, j.postedValue, j.logo, j.source,
-                    (j.tags.includes('H1B Sponsor') ? 1 : 0),
+                    JSON.stringify(j.tags || []), JSON.stringify(j.skills || []), j.description, j.link, j.posted, j.postedValue, j.logo, j.source,
+                    (j.tags && j.tags.includes('H1B Sponsor') ? 1 : 0),
                     classifyCompany(j.company, j.source),
                     1
                 ]);
             } catch (e) { }
         }
-    } catch (e) { } finally { isScraping = false; }
+    } catch (e) { console.error('[Scraper] Error:', e.message); } finally { isScraping = false; }
 }
 
 setTimeout(runJobScraper, 5000);
-setInterval(runJobScraper, 15 * 60 * 1000); // Updated to 15 min as requested
+setInterval(runJobScraper, 20 * 60 * 1000); // Updated to 20 min as requested
 
 app.get('/api/jobs', async (req, res) => {
     try {
