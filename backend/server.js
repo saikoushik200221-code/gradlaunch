@@ -166,14 +166,34 @@ const aiLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, message: { error: 'A
 
 // Configure CORS for production and development
 const corsOptions = {
-    origin: process.env.NODE_ENV === 'production'
-        ? ['https://gradlaunch.vercel.app', 'https://www.gradlaunch.vercel.app', 'https://gradlaunch-ecru.vercel.app', /\.vercel\.app$/]
-        : ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'],
+    origin: function (origin, callback) {
+        // Production (Render) or when NODE_ENV not explicitly set = allow Vercel
+        const isProduction = process.env.NODE_ENV === 'production' || !process.env.NODE_ENV;
+
+        const allowedOrigins = isProduction
+            ? ['https://gradlaunch.vercel.app', 'https://www.gradlaunch.vercel.app', 'https://gradlaunch-ecru.vercel.app']
+            : ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173', 'http://localhost:3001'];
+
+        // Allow all vercel.app subdomains and localhost
+        const isAllowed = !origin ||
+            allowedOrigins.includes(origin) ||
+            /\.vercel\.app$/.test(origin) ||
+            /^http:\/\/localhost/.test(origin) ||
+            /^http:\/\/127\.0\.0\.1/.test(origin);
+
+        if (isAllowed) {
+            callback(null, true);
+        } else {
+            console.warn(`[CORS] Rejected origin: ${origin}`);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
+console.log(`[CORS] Configured for NODE_ENV=${process.env.NODE_ENV} (treating as ${process.env.NODE_ENV === 'production' || !process.env.NODE_ENV ? 'PRODUCTION' : 'DEVELOPMENT'})`);
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../frontend/dist'), { index: false }));
@@ -360,31 +380,52 @@ app.post('/api/auth/register', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
+    console.log(`[Auth] Login attempt for ${email}`);
     try {
         const user = await db.get('SELECT * FROM users WHERE email = ?', [email]);
-        if (!user) return res.status(400).json({ error: 'Invalid credentials' });
-        if (hashPassword(password) !== user.password) return res.status(400).json({ error: 'Invalid credentials' });
+        if (!user) {
+            console.log(`[Auth] User not found: ${email}`);
+            return res.status(400).json({ error: 'Invalid credentials' });
+        }
+        if (hashPassword(password) !== user.password) {
+            console.log(`[Auth] Invalid password for ${email}`);
+            return res.status(400).json({ error: 'Invalid credentials' });
+        }
         const token = signToken({ id: user.id, email: user.email, name: user.name });
+        console.log(`[Auth] Login successful for ${email}`);
         res.json({ token, user: { id: user.id, name: user.name, email: user.email } });
-    } catch (err) { res.status(500).json({ error: 'Login error' }); }
+    } catch (err) {
+        console.error(`[Auth] Login error:`, err.message);
+        res.status(500).json({ error: 'Login error' });
+    }
 });
 
 app.post('/api/auth/google', async (req, res) => {
     const { credential } = req.body;
-    if (!credential) return res.status(400).json({ error: 'Missing Google credential' });
+    console.log(`[Auth] Google login attempt`);
+    if (!credential) {
+        console.log(`[Auth] Google: Missing credential`);
+        return res.status(400).json({ error: 'Missing Google credential' });
+    }
     try {
         const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: GOOGLE_CLIENT_ID });
         const { email, name, sub: googleId } = ticket.getPayload();
+        console.log(`[Auth] Google verified: ${email}`);
         let user = await db.get('SELECT * FROM users WHERE email = ?', [email]);
         if (!user) {
+            console.log(`[Auth] Creating new user from Google: ${email}`);
             const id = Date.now().toString();
             const hashedPassword = hashPassword(`google_${googleId}`);
             await db.run('INSERT INTO users (id, name, email, password, profile) VALUES (?, ?, ?, ?, ?)', [id, name, email, hashedPassword, null]);
             user = { id, name, email };
         }
         const token = signToken({ id: user.id, email: user.email, name: user.name });
+        console.log(`[Auth] Google login successful: ${email}`);
         res.json({ token, user: { id: user.id, name: user.name, email: user.email } });
-    } catch (err) { res.status(401).json({ error: 'Invalid Google credential' }); }
+    } catch (err) {
+        console.error(`[Auth] Google login error:`, err.message);
+        res.status(401).json({ error: 'Invalid Google credential' });
+    }
 });
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {

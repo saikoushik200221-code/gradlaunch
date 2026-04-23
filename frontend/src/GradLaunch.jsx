@@ -40,7 +40,7 @@ function AuthScreen({ onLogin }) {
       const data = await res.json();
       if (res.ok) onLogin(data.user, data.token);
       else setError(data.error || "Google Sign-In failed");
-    } catch (err) { 
+    } catch (err) {
       console.error(`[Auth] Google login error: ${err.message}`);
       setError("Server connection failed: " + err.message);
     }
@@ -65,7 +65,7 @@ function AuthScreen({ onLogin }) {
       const data = await res.json();
       if (res.ok) onLogin(data.user, data.token);
       else setError(data.error || "Authentication failed");
-    } catch (err) { 
+    } catch (err) {
       console.error(`[Auth] Connection error: ${err.message}`);
       setError("Server connection failed: " + err.message);
     }
@@ -90,7 +90,7 @@ function AuthScreen({ onLogin }) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && <div className="bg-pink/10 border border-pink/30 text-pink text-xs py-3 px-4 rounded-2xl text-center font-bold tracking-tight">{error}</div>}
-          
+
           {isRegister && (
             <input
               required placeholder="Full Name"
@@ -233,7 +233,7 @@ function GradLaunchContent() {
     const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
     const token = localStorage.getItem("token");
     const exists = applications.find(a => a.company === job.company && a.role === job.title);
-    
+
     if (!exists) {
       try {
         const stage = job.wishlist ? "Wishlist" : "Applied";
@@ -273,7 +273,7 @@ function GradLaunchContent() {
   }
 
   if (authLoading) return <div className="h-screen bg-background flex items-center justify-center font-syne text-accent animate-pulse uppercase tracking-[0.4em] font-black">Initializing Orion AI...</div>;
-  
+
   const isPublicPath = location.pathname === "/jobs" || location.pathname.startsWith("/jobs/");
   const showAuthOverlay = !currentUser && !isPublicPath;
 
@@ -313,4 +313,3 @@ export default function GradLaunch() {
   );
 }
 
- 
