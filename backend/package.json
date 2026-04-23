@@ -23,7 +23,9 @@
   },
   "dependencies": {
     "@21st-sdk/agent": "latest",
+    "@anthropic-ai/sdk": "^0.90.0",
     "@google/generative-ai": "^0.24.1",
+    "@libsql/client": "^0.17.2",
     "axios": "^1.13.6",
     "bcryptjs": "^2.4.3",
     "cheerio": "^1.2.0",

@@ -178,6 +178,9 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../frontend/dist'), { index: false }));
 
+// Wire up the new Resume route
+app.use('/api/resume', require('./routes/resume'));
+
 // Auth Helpers
 function hashPassword(password) { return crypto.createHmac('sha256', JWT_SECRET).update(password).digest('hex'); }
 function signToken(data) {
