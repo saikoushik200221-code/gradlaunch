@@ -903,9 +903,7 @@ function getMatchScore(title) {
     return 65;
 }
 
-
-async function fetchRapidApiJSearch(),
-            fetchArbeitnowJobs() {
+async function fetchRapidApiJSearch() {
     const key = process.env.RAPIDAPI_KEY;
     if (!key) return [];
     console.log('[Scraper] Fetching from RapidAPI (JSearch)...');
@@ -968,7 +966,7 @@ async function fetchArbeitnowJobs() {
 
 async function fetchLeverJobs() {
     const companies = [
-        "spotify", "palantir", "yelp", "roblox", "netflix", "twitch", "stripe", "square", "affirm", 
+        "spotify", "palantir", "yelp", "roblox", "netflix", "twitch", "stripe", "square", "affirm",
         "datadog", "figma", "notion", "airtable", "asana", "box", "dropbox", "hashicorp", "okta", "slack",
         "zoom", "robinhood", "coinbase", "kraken", "ripple", "instacart", "doordash", "postmates", "uber", "lyft"
     ];
@@ -1084,7 +1082,7 @@ function parseRelativeDate(str) {
     if (lower.includes('just') || lower.includes('today') || lower.includes('moment')) {
         return now;
     }
-    
+
     const parsed = new Date(str);
     return isNaN(parsed.getTime()) ? now : parsed.getTime();
 }
@@ -1108,11 +1106,10 @@ function extractSkills(title, desc) {
     return JSON.stringify(skills.filter(s => text.includes(s.toLowerCase())));
 }
 
-async function fetchApifyJobs(),
-            fetchRapidApiJSearch() {
+async function fetchApifyJobs() {
     const token = process.env.APIFY_API_KEY;
     if (!token) return [];
-    
+
     console.log('[Scraper] Triggering Apify Google Jobs Scraper...');
     const queries = [
         "Software Engineer New Grad USA",
@@ -1126,7 +1123,7 @@ async function fetchApifyJobs(),
     ];
 
     let allJobs = [];
-    
+
     try {
         // Using sync run for small result sets, increased timeout
         const { data } = await axios.post(`https://api.apify.com/v2/acts/apify~google-jobs-scraper/run-sync-get-dataset-items?token=${token}`, {
@@ -1140,9 +1137,9 @@ async function fetchApifyJobs(),
         if (Array.isArray(data)) {
             data.forEach(item => {
                 if (!item.title || !item.companyName) return;
-                
+
                 const postedVal = parseRelativeDate(item.postedAt);
-                
+
                 allJobs.push({
                     id: `apf-${item.jobId || crypto.createHash('md5').update(item.title + item.companyName).digest('hex')}`,
                     title: item.title,
@@ -1186,7 +1183,7 @@ async function runJobScraper() {
                 type: "Full-time",
                 postedValue: new Date(job.posted_at).getTime(),
                 posted: getPostedTime(job.posted_at),
-                salary: job.salary_max ? \`$\${Math.floor(job.salary_min/1000)}k-$\${Math.floor(job.salary_max/1000)}k\` : 'Competitive',
+                salary: job.salary_max ? `$${Math.floor(job.salary_min / 1000)}k-$${Math.floor(job.salary_max / 1000)}k` : 'Competitive',
                 tags: generateTags(job.title, job.description, job.location),
                 logo: job.company.charAt(0).toUpperCase(),
                 match: getMatchScore(job.title),
@@ -1198,11 +1195,13 @@ async function runJobScraper() {
         }
 
         const [leverJobs, greenhouseJobs, apifyJobs, rapidApiJobs, arbeitnowJobs] = await Promise.all([
-            fetchLeverJobs(), 
+            fetchLeverJobs(),
             fetchGreenhouseJobs(),
-            fetchApifyJobs()
+            fetchApifyJobs(),
+            fetchRapidApiJSearch(),
+            fetchArbeitnowJobs()
         ]);
-        
+
         const fallbackRealJobs = [
             {
                 id: 'fb-1', title: 'Software Engineer, Early Career', company: 'Palantir', location: 'Palo Alto, CA', type: 'Full-time', salary: '$140k-$170k',
@@ -1237,24 +1236,25 @@ async function runJobScraper() {
                 tags: ['New Grad', 'Product'], logo: 'N', match: 85, description: 'Shape the all-in-one workspace.', link: 'https://notion.so', source: 'Direct', postedValue: Date.now() - 7200000, posted: '2h ago'
             }
         ];
+
+        let allRaw = [...leverJobs, ...greenhouseJobs, ...apifyJobs, ...adzunaRaw, ...rapidApiJobs, ...arbeitnowJobs].filter(job => isUSJob(job) && isGenuineJob(job));
         allRaw.push(...fallbackRealJobs);
 
-        const allRaw = [...leverJobs, ...greenhouseJobs, ...apifyJobs, ...adzunaRaw, ...rapidApiJobs, ...arbeitnowJobs].filter(job => isUSJob(job) && isGenuineJob(job));
         const existing = await db.all('SELECT id FROM jobs');
         const existingIds = new Set(existing.map(e => e.id));
         const newJobs = allRaw.filter(j => !existingIds.has(j.id));
 
-        console.log(\`[Scraper] Found \${newJobs.length} new highly-vetted jobs to insert.\`);
+        console.log(`[Scraper] Found ${newJobs.length} new highly-vetted jobs to insert.`);
 
         for (let j of newJobs) {
             try {
                 const s = parseSalaryRange(j.salary);
-                await db.run(\`
+                await db.run(`
                     INSERT OR IGNORE INTO jobs (
                         id, title, company, location, type, salary, salary_min, salary_max, 
                         tags, skills, description, link, posted, posted_value, logo, source, sponsorship_friendly, company_type, is_trusted
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                \`, [
+                `, [
                     j.id, j.title, j.company, j.location, j.type, j.salary, s.min, s.max,
                     JSON.stringify(j.tags || []), JSON.stringify(j.skills || []), j.description, j.link, j.posted, j.postedValue, j.logo, j.source,
                     (j.tags && j.tags.includes('H1B Sponsor') ? 1 : 0),
@@ -1287,7 +1287,7 @@ app.get('/api/jobs', async (req, res) => {
 
         if (q) {
             where.push("(title LIKE ? OR company LIKE ? OR description LIKE ?)");
-            const searchTerm = `%${q}%`;
+            const searchTerm = `% ${q} % `;
             params.push(searchTerm, searchTerm, searchTerm);
         }
 
@@ -1310,13 +1310,13 @@ app.get('/api/jobs', async (req, res) => {
         }
 
         // Lightweight tag filters on the stored tags JSON blob.
-        if (remote === 'true')       where.push("(LOWER(COALESCE(location, '')) LIKE '%remote%' OR LOWER(COALESCE(tags, '')) LIKE '%remote%')");
-        if (h1b_sponsor === 'true')  where.push('sponsorship_friendly = 1');
-        if (newGrad === 'true')      where.push("LOWER(COALESCE(tags, '')) LIKE '%new grad%'");
+        if (remote === 'true') where.push("(LOWER(COALESCE(location, '')) LIKE '%remote%' OR LOWER(COALESCE(tags, '')) LIKE '%remote%')");
+        if (h1b_sponsor === 'true') where.push('sponsorship_friendly = 1');
+        if (newGrad === 'true') where.push("LOWER(COALESCE(tags, '')) LIKE '%new grad%'");
 
         let query = 'SELECT * FROM jobs';
         if (where.length) query += ' WHERE ' + where.join(' AND ');
-        
+
         // Ensure new jobs (higher posted_value) always come first, handle NULLs by putting them last
         query += ' ORDER BY CASE WHEN posted_value IS NULL THEN 0 ELSE posted_value END DESC LIMIT 200';
 
@@ -1878,19 +1878,19 @@ app.post('/api/hybrid/prefill', authenticateToken, async (req, res) => {
         const user = await db.get('SELECT profile, resume_data FROM users WHERE id = ?', [userId]);
         const userProfile = user.resume_data ? JSON.parse(user.resume_data) : (user.profile ? JSON.parse(user.profile) : {});
 
-        const result = await dispatchApplication(db, { 
-            userId, 
-            tier: 2, 
-            jobUrl: url, 
-            userProfile 
+        const result = await dispatchApplication(db, {
+            userId,
+            tier: 2,
+            jobUrl: url,
+            userProfile
         });
 
         if (result.status === 'prefill_ready') {
-            res.json({ 
-                success: true, 
+            res.json({
+                success: true,
                 ats: result.logs[0].metadata?.ats,
                 fields: result.payload.fields,
-                questions: result.payload.questions 
+                questions: result.payload.questions
             });
         } else {
             res.json({ success: false, error: 'Could not prepare prefill' });
@@ -1937,7 +1937,7 @@ app.post('/api/ai/auto-fix', authenticateToken, async (req, res) => {
             if (!memoryVerifiedLevel) {
                 const memory = await db.get(
                     'SELECT context FROM user_preferences WHERE user_id = ? AND preference_type = ? AND context LIKE ?',
-                    [req.user.id, 'skill_memory', `%"skill":"${skill}"%`]
+                    [req.user.id, 'skill_memory', `% "skill": "${skill}" % `]
                 );
                 if (memory) {
                     try {
@@ -1972,8 +1972,8 @@ app.post('/api/ai/auto-fix', authenticateToken, async (req, res) => {
 
             // CONSTRAINT LAYER: Calibrate bullet to verified level
             const levelPrompts = {
-                advanced: `Generate ONE concise resume bullet (max 20 words) demonstrating advanced production experience with "${skill}". Include a realistic metric. STAR method.`,
-                intermediate: `Generate ONE concise resume bullet (max 20 words) showing project-level experience with "${skill}". Include a reasonable metric.`,
+                advanced: `Generate ONE concise resume bullet(max 20 words) demonstrating advanced production experience with "${skill}".Include a realistic metric.STAR method.`,
+                intermediate: `Generate ONE concise resume bullet(max 20 words) showing project - level experience with "${skill}".Include a reasonable metric.`,
                 beginner: `Add "Exposure to ${skill}" or "Familiar with ${skill}" — do NOT claim deep expertise.`
             };
 
@@ -1986,11 +1986,11 @@ app.post('/api/ai/auto-fix', authenticateToken, async (req, res) => {
 
             if (memoryVerifiedLevel === 'beginner') {
                 improved = [...currentSkills, `${skill} (Familiar)`].join(', ');
-                explanation = `Added "${skill} (Familiar)" to skills — qualified to reflect learning-level experience.`;
+                explanation = `Added "${skill} (Familiar)" to skills — qualified to reflect learning - level experience.`;
                 atsImpact = '+2 pts';
             } else {
                 improved = [...currentSkills, skill].join(', ');
-                explanation = `Added "${skill}" to your skills section (verified: ${verifiedLevel}).`;
+                explanation = `Added "${skill}" to your skills section(verified: ${verifiedLevel}).`;
                 atsImpact = '+3 pts';
 
                 // Generate calibrated bullet point
@@ -2007,9 +2007,9 @@ app.post('/api/ai/auto-fix', authenticateToken, async (req, res) => {
                         // CONSTRAINT: Reject hallucinated metrics (>10x, >$1M for junior roles)
                         const suspiciousMetrics = bulletText.match(/(\d+)x|(\$[\d,]+[MB])/g);
                         if (!suspiciousMetrics || suspiciousMetrics.length === 0) {
-                            improved += `\n\nSuggested bullet: ${bulletText}`;
+                            improved += `\n\nSuggested bullet: ${bulletText} `;
                         } else {
-                            improved += `\n\nSuggested bullet: ${bulletText.replace(/(\d+)x/g, '2x').replace(/(\$[\d,]+[MB])/g, '$50K')}`;
+                            improved += `\n\nSuggested bullet: ${bulletText.replace(/(\d+)x/g, '2x').replace(/(\$[\d,]+[MB])/g, '$50K')} `;
                         }
                         explanation += ` Contextual bullet generated at ${verifiedLevel} proficiency level.`;
                         atsImpact = '+5 pts';
@@ -2032,7 +2032,7 @@ app.post('/api/ai/auto-fix', authenticateToken, async (req, res) => {
                     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
                     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
                     const result = await model.generateContent(
-                        `Improve this resume bullet point to include quantifiable metrics and be ATS-friendly. CONSTRAINT: Metrics must be realistic and proportional to the original scope. Do NOT inflate numbers beyond 3x the implied scale. Original: "${original}". Job context: ${jdText.substring(0, 500)}. Return ONLY the improved bullet text.`
+                        `Improve this resume bullet point to include quantifiable metrics and be ATS - friendly.CONSTRAINT: Metrics must be realistic and proportional to the original scope.Do NOT inflate numbers beyond 3x the implied scale.Original: "${original}".Job context: ${jdText.substring(0, 500)}. Return ONLY the improved bullet text.`
                     );
                     improved = result.response.text().trim();
                     explanation = 'Enhanced with calibrated metrics and action verbs. All metrics are proportional to original scope.';
@@ -2062,27 +2062,27 @@ app.post('/api/ai/auto-fix', authenticateToken, async (req, res) => {
                     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
                     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
                     const result = await model.generateContent(
-                        `Rewrite this summary for ATS. CONSTRAINT: Keep the professional scope accurate — do not upgrade job title or claim unverified expertise. Summary: "${original}". Target: ${context || 'Software Engineer'}. JD: ${jdText.substring(0, 500)}. Return ONLY the improved summary (2-3 sentences).`
+                        `Rewrite this summary for ATS.CONSTRAINT: Keep the professional scope accurate — do not upgrade job title or claim unverified expertise.Summary: "${original}".Target: ${context || 'Software Engineer'}.JD: ${jdText.substring(0, 500)}. Return ONLY the improved summary(2 - 3 sentences).`
                     );
                     improved = result.response.text().trim();
                     explanation = 'Summary rewritten with ATS keywords. Professional scope preserved.';
                 } catch (e) {
-                    improved = `Results-driven professional with expertise in ${context || 'full-stack development'}, seeking to leverage technical skills in a high-impact role.`;
+                    improved = `Results - driven professional with expertise in ${context || 'full-stack development'}, seeking to leverage technical skills in a high - impact role.`;
                     explanation = 'Keyword-optimized for ATS compatibility.';
                     confidence = 60;
                 }
             } else {
-                improved = `Results-driven professional with expertise in ${context || 'full-stack development'}, seeking to leverage technical skills in a high-impact role.`;
+                improved = `Results - driven professional with expertise in ${context || 'full-stack development'}, seeking to leverage technical skills in a high - impact role.`;
                 explanation = 'Keyword-optimized for ATS compatibility.';
                 confidence = 60;
             }
             atsImpact = '+6 pts';
         } else {
-            return res.status(400).json({ error: `Unknown fixType: ${fixType}` });
+            return res.status(400).json({ error: `Unknown fixType: ${fixType} ` });
         }
 
         // Generate idempotency fix_id
-        const fixId = crypto.createHash('sha256').update(`${fixType}|${original}|${improved}`).digest('hex').substring(0, 16);
+        const fixId = crypto.createHash('sha256').update(`${fixType}| ${original}| ${improved} `).digest('hex').substring(0, 16);
 
         // Deterministic replay log
         const latency = Date.now() - startTime;
@@ -2122,13 +2122,13 @@ app.post('/api/ai/auto-fix/accept', authenticateToken, async (req, res) => {
     const { fixType, accepted, original, improved, jobId, fixId } = req.body;
 
     // Generate fix_id if not provided (backward compat)
-    const computedFixId = fixId || crypto.createHash('sha256').update(`${fixType}|${original || ''}|${improved || ''}`).digest('hex').substring(0, 16);
+    const computedFixId = fixId || crypto.createHash('sha256').update(`${fixType}| ${original || ''}| ${improved || ''} `).digest('hex').substring(0, 16);
 
     try {
         // IDEMPOTENCY CHECK: Has this exact fix already been applied?
         const existing = await db.get(
             'SELECT id, preference_type FROM user_preferences WHERE user_id = ? AND context LIKE ?',
-            [req.user.id, `%"fixId":"${computedFixId}"%`]
+            [req.user.id, `% "fixId": "${computedFixId}" % `]
         );
 
         if (existing) {
@@ -2221,7 +2221,7 @@ app.post('/api/ai/auto-fix/undo', authenticateToken, async (req, res) => {
             // Undo specific fix
             snapshot = await db.get(
                 'SELECT context FROM user_preferences WHERE user_id = ? AND preference_type = ? AND context LIKE ? ORDER BY created_at DESC LIMIT 1',
-                [req.user.id, 'undo_snapshot', `%"fixId":"${fixId}"%`]
+                [req.user.id, 'undo_snapshot', `% "fixId": "${fixId}" % `]
             );
         } else {
             // Undo last fix
@@ -2242,13 +2242,13 @@ app.post('/api/ai/auto-fix/undo', authenticateToken, async (req, res) => {
             // Remove the accepted fix record too
             await db.run(
                 'DELETE FROM user_preferences WHERE user_id = ? AND preference_type = ? AND context LIKE ?',
-                [req.user.id, 'accepted_fix', `%"fixId":"${snapshotData.fixId}"%`]
+                [req.user.id, 'accepted_fix', `% "fixId": "${snapshotData.fixId}" % `]
             );
 
             // Remove the undo snapshot
             await db.run(
                 'DELETE FROM user_preferences WHERE user_id = ? AND preference_type = ? AND context LIKE ?',
-                [req.user.id, 'undo_snapshot', `%"fixId":"${snapshotData.fixId}"%`]
+                [req.user.id, 'undo_snapshot', `% "fixId": "${snapshotData.fixId}" % `]
             );
 
             return res.json({ success: true, undoneFixId: snapshotData.fixId });
@@ -2383,7 +2383,7 @@ app.get('/api/ai/analyze-stream', authenticateToken, async (req, res) => {
     res.setHeader('Connection', 'keep-alive');
 
     const sendEvent = (event, data) => {
-        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+        res.write(`event: ${event} \ndata: ${JSON.stringify(data)} \n\n`);
         if (typeof res.flush === 'function') res.flush();
     };
 
@@ -2499,8 +2499,8 @@ app.post('/api/jobs/:jobId/apply', authenticateToken, async (req, res) => {
 
         // Record application in DB
         await db.run(`
-            INSERT INTO applications (user_id, company, role, job_link, stage, match_score) 
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO applications(user_id, company, role, job_link, stage, match_score)
+        VALUES(?, ?, ?, ?, ?, ?)
         `, [
             req.user.id,
             job.company,
@@ -2538,7 +2538,7 @@ app.post('/api/ai/optimize', aiLimiter, authenticateToken, async (req, res) => {
 
     try {
         const user = await db.get('SELECT name, skills FROM users WHERE id = ?', [req.user.id]);
-        
+
         let tailoredResume = resume;
         let improvedBullet = '';
         let keywords = [];
@@ -2571,13 +2571,13 @@ app.post('/api/ai/optimize', aiLimiter, authenticateToken, async (req, res) => {
                     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
                     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-                    const prompt = `You are a FAANG Recruiter. Improve this single resume bullet point using the STAR method (Situation, Task, Action, Result).
+                    const prompt = `You are a FAANG Recruiter.Improve this single resume bullet point using the STAR method (Situation, Task, Action, Result).
                     
 Original bullet: "${resume}"
 Target JD Context: "${jobDescription.substring(0, 300)}"
 Optimization Strategy: ${intensityMap[intensity] || intensityMap['balanced']}
 
-Return ONLY the improved bullet point. Be concise (max 25 words). No preamble.`;
+Return ONLY the improved bullet point.Be concise(max 25 words).No preamble.`;
 
                     const result = await model.generateContent(prompt);
                     improvedBullet = result.response.text().trim();
@@ -2590,24 +2590,24 @@ Return ONLY the improved bullet point. Be concise (max 25 words). No preamble.`;
                     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
                     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-                    const prompt = `You are an expert Resume Strategist. Tailor this resume to the following job description.
+                    const prompt = `You are an expert Resume Strategist.Tailor this resume to the following job description.
 
---- BASES RESUME ---
-${resume}
+--- BASES RESUME-- -
+            ${resume}
 
---- TARGET JOB DESCRIPTION ---
-${jobDescription.substring(0, 1500)}
+        --- TARGET JOB DESCRIPTION-- -
+            ${jobDescription.substring(0, 1500)}
 
---- TAILORING PROTOCOL ---
-1. STRATEGIC SUMMARY: Rewrite the summary to be a "Value Proposition". Narrate why the candidate's unique mix of projects and experience is a 1:1 match for this role.
-2. PROJECT PROMOTION: If the candidate's 'Projects' section contains technologies mentioned in the JD that are NOT in their 'Experience' section, PRIORITIZE the Projects. Make them sound like production-level work.
-3. INTENSITY: ${intensityMap[intensity] || intensityMap['balanced']}
-4. KEYWORDS: Ensure these terms are integrated naturally: ${keywords.join(', ')}
-5. STRUCTURE: Preserve section headers. Use a clean, modern layout.
-6. STAR METHOD: Every bullet MUST follow (Action -> Result). Use metrics if provided.
-7. HONESTY: Do NOT invent experience. Reframe only.
+        --- TAILORING PROTOCOL-- -
+            1. STRATEGIC SUMMARY: Rewrite the summary to be a "Value Proposition".Narrate why the candidate's unique mix of projects and experience is a 1:1 match for this role.
+        2. PROJECT PROMOTION: If the candidate's 'Projects' section contains technologies mentioned in the JD that are NOT in their 'Experience' section, PRIORITIZE the Projects. Make them sound like production-level work.
+        3. INTENSITY: ${intensityMap[intensity] || intensityMap['balanced']}
+        4. KEYWORDS: Ensure these terms are integrated naturally: ${keywords.join(', ')}
+        5. STRUCTURE: Preserve section headers.Use a clean, modern layout.
+6. STAR METHOD: Every bullet MUST follow(Action -> Result).Use metrics if provided.
+7. HONESTY: Do NOT invent experience.Reframe only.
 
-Return the FULL tailored resume text. No intro, no outro, no markdown formatting (pure text).`;
+Return the FULL tailored resume text.No intro, no outro, no markdown formatting(pure text).`;
 
                     const result = await model.generateContent(prompt);
                     tailoredResume = result.response.text().trim();
@@ -2634,7 +2634,7 @@ Return the FULL tailored resume text. No intro, no outro, no markdown formatting
             score,
             keywords,
             tips: score < 80 ? ['Add more metrics', 'Inject missing keywords'] : ['Resume looks strong'],
-            add: keywords.filter(k => !checkText.toLowerCase().includes(k)).map(k => `Add ${k}`),
+            add: keywords.filter(k => !checkText.toLowerCase().includes(k)).map(k => `Add ${k} `),
             atsScore: score,
             keywordMatches: hasKeywords,
             metricsCount: hasMetrics?.length || 0,
@@ -2684,7 +2684,7 @@ app.post('/api/ai/match', aiLimiter, authenticateToken, async (req, res) => {
         // Generate suggestions
         let suggestions = [];
         if (missingSkills.length > 0) {
-            suggestions.push(`Learn or highlight: ${missingSkills.slice(0, 2).join(', ')}`);
+            suggestions.push(`Learn or highlight: ${missingSkills.slice(0, 2).join(', ')} `);
         }
         suggestions.push('Tailor your cover letter to highlight relevant projects');
         if (score > 80) {
@@ -2701,13 +2701,13 @@ app.post('/api/ai/match', aiLimiter, authenticateToken, async (req, res) => {
                 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
                 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-                const prompt = `Provide a 2-3 sentence deep match analysis for this candidate applying to this role.
+                const prompt = `Provide a 2 - 3 sentence deep match analysis for this candidate applying to this role.
 
 RESUME EXCERPT: ${resume.substring(0, 300)}
 
 JOB DESCRIPTION: ${jobDescription.substring(0, 500)}
 
-Be honest about fit. Return ONLY the analysis, no intro.`;
+Be honest about fit.Return ONLY the analysis, no intro.`;
 
                 const result = await model.generateContent(prompt);
                 analysis = result.response.text().trim();
@@ -2754,10 +2754,10 @@ app.post('/api/ai/cover-letter', aiLimiter, authenticateToken, async (req, res) 
             const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
             const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-            const prompt = `You are a world-class career coach. Write a compelling, punchy cover letter for this candidate.
-            
-ROLE: ${role || 'Software Engineer'}
-COMPANY: ${company || 'this company'}
+            const prompt = `You are a world - class career coach.Write a compelling, punchy cover letter for this candidate.
+
+            ROLE: ${role || 'Software Engineer'}
+        COMPANY: ${company || 'this company'}
 
 RESUME CONTEXT:
 ${resume.substring(0, 2000)}
@@ -2765,9 +2765,9 @@ ${resume.substring(0, 2000)}
 JOB DESCRIPTION:
 ${jobDescription.substring(0, 1000)}
 
-INSTRUCTIONS:
-1. Tone: Professional, enthusiastic, and evidence-based.
-2. Structure: 3-4 paragraphs (Hook, Evidence/Projects, Culture Fit, Call to Action).
+        INSTRUCTIONS:
+        1. Tone: Professional, enthusiastic, and evidence - based.
+2. Structure: 3 - 4 paragraphs(Hook, Evidence / Projects, Culture Fit, Call to Action).
 3. Focus: Connect specific projects from the resume to the specific needs of the JD.
 4. Avoid: Cliches like "To whom it may concern" or "I am a hard worker".
 5. Return ONLY the cover letter text.`;
