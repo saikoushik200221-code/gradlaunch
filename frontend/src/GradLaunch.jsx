@@ -29,15 +29,21 @@ function AuthScreen({ onLogin }) {
     setError("");
     try {
       const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
+      console.log(`[Auth] Google login to ${apiBase}/api/auth/google`);
       const res = await fetch(`${apiBase}/api/auth/google`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ credential: credentialResponse.credential })
+        body: JSON.stringify({ credential: credentialResponse.credential }),
+        credentials: 'include'
       });
+      console.log(`[Auth] Google response status: ${res.status}`);
       const data = await res.json();
       if (res.ok) onLogin(data.user, data.token);
       else setError(data.error || "Google Sign-In failed");
-    } catch (err) { setError("Server connection failed"); }
+    } catch (err) { 
+      console.error(`[Auth] Google login error: ${err.message}`);
+      setError("Server connection failed: " + err.message);
+    }
     setLoading(false);
   }
 
@@ -48,15 +54,21 @@ function AuthScreen({ onLogin }) {
     const endpoint = isRegister ? "register" : "login";
     try {
       const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
+      console.log(`[Auth] Attempting ${endpoint} to ${apiBase}/api/auth/${endpoint}`);
       const res = await fetch(`${apiBase}/api/auth/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form)
+        body: JSON.stringify(form),
+        credentials: 'include'
       });
+      console.log(`[Auth] Response status: ${res.status}`);
       const data = await res.json();
       if (res.ok) onLogin(data.user, data.token);
       else setError(data.error || "Authentication failed");
-    } catch (err) { setError("Server connection failed"); }
+    } catch (err) { 
+      console.error(`[Auth] Connection error: ${err.message}`);
+      setError("Server connection failed: " + err.message);
+    }
     setLoading(false);
   }
 
