@@ -332,16 +332,16 @@ function JobDetail({ job, onClose, onTailor, onApply }) {
         </div>
 
         <div style={{ display: "flex", gap: 16, alignItems: "flex-start", marginBottom: 18 }}>
-          <Logo letter={job.logo} color={job.logoColor} size={56} radius={13} />
+          <Logo letter={job.logo?.startsWith("http") ? <img src={job.logo} style={{width:24,height:24,objectFit:"contain",borderRadius:6}} /> : (job.company?.[0] || "?")} color={job.logoColor || "#4285F4"} size={56} radius={13} />
           <div style={{ flex: 1 }}>
             <h2 style={{ margin: 0, fontFamily: "Syne, sans-serif", fontWeight: 700, fontSize: 21, color: C.text }}>{job.title}</h2>
-            <div style={{ fontSize: 14, color: C.textDim, marginTop: 4 }}>{job.company} · {job.location}</div>
+            <div style={{ fontSize: 14, color: C.textDim, marginTop: 4 }}>{job.company} · {job.location || "Remote"}</div>
           </div>
-          <MatchBadge score={job.match} size="lg" />
+          <MatchBadge score={Math.round(job.match || job.match_score || 75)} size="lg" />
         </div>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
-          {job.tags.map(t => <Tag key={t} label={t} />)}
+          {(job.tags || []).map(t => <Tag key={t} label={t} />)}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 22 }}>
