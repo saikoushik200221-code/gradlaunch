@@ -871,6 +871,35 @@ function isGenuineJob(job) {
 }
 
 
+/**
+ * Convert a date/timestamp to a human-readable relative time string
+ */
+function getPostedTime(dateInput) {
+    if (!dateInput) return 'Recently';
+    const now = Date.now();
+    const date = typeof dateInput === 'number' ? dateInput : new Date(dateInput).getTime();
+    const diffMs = now - date;
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const days = Math.floor(hours / 24);
+    if (hours < 1) return 'Just now';
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7) return `${days}d ago`;
+    if (days < 30) return `${Math.floor(days / 7)}w ago`;
+    return `${Math.floor(days / 30)}mo ago`;
+}
+
+/**
+ * Estimate a match score based on job title keywords (0-100)
+ */
+function getMatchScore(title) {
+    const t = (title || '').toLowerCase();
+    if (t.includes('new grad') || t.includes('entry level') || t.includes('associate')) return 88;
+    if (t.includes('junior') || t.includes('jr.') || t.includes('graduate')) return 82;
+    if (t.includes('engineer') || t.includes('developer') || t.includes('analyst')) return 74;
+    if (t.includes('intern') || t.includes('internship')) return 70;
+    return 65;
+}
+
 async function fetchLeverJobs() {
     const companies = [
         "spotify", "palantir", "yelp", "roblox", "netflix", "twitch", "stripe", "square", "affirm", 
@@ -878,12 +907,18 @@ async function fetchLeverJobs() {
         "zoom", "robinhood", "coinbase", "kraken", "ripple", "instacart", "doordash", "postmates", "uber", "lyft"
     ];
     let jobs = [];
+    const newGradKeywords = ['new grad', 'entry level', 'associate', 'junior', 'jr.', 'graduate', 'early career', 'intern', 'software engineer i', 'engineer i', 'analyst i'];
     for (const company of companies) {
         try {
             const { data } = await axios.get(`https://api.lever.co/v0/postings/${company}?mode=json`, { timeout: 15000 });
             if (Array.isArray(data)) {
                 data.forEach(job => {
-                    const desc = job.descriptionPlain || "";
+                    const desc = (job.descriptionPlain || '').toLowerCase();
+                    const titleLower = (job.text || '').toLowerCase();
+                    const isNewGrad = newGradKeywords.some(k => titleLower.includes(k) || desc.includes(k));
+                    // Only add entry-level/new grad roles, or allow a broader set if we're getting too few
+                    if (!isNewGrad && !titleLower.includes('engineer') && !titleLower.includes('developer') && !titleLower.includes('scientist') && !titleLower.includes('analyst') && !titleLower.includes('designer') && !titleLower.includes('manager')) return;
+                    const rawDesc = job.descriptionPlain || '';
                     jobs.push({
                         id: `lvr-${job.id}`,
                         title: job.text,
@@ -896,7 +931,7 @@ async function fetchLeverJobs() {
                         tags: generateTags(job.text, desc, job.categories?.location || "Remote"),
                         logo: company.charAt(0).toUpperCase(),
                         match: getMatchScore(job.text),
-                        description: desc.trim(),
+                        description: rawDesc.trim(),
                         skills: extractSkills(job.text, desc),
                         link: job.hostedUrl,
                         source: 'Lever'
@@ -910,16 +945,25 @@ async function fetchLeverJobs() {
 
 async function fetchGreenhouseJobs() {
     const boards = [
-        "discord", "cloudflare", "mongodb", "cruise", "paloaltonetworks", "github", "gitlab", "reddit", "snapchat", 
-        "pinterest", "quora", "medium", "substack", "wealthfront", "betterment", "wealthsimple", "gusto", "zenefits",
-        "rippling", "brex", "ramp", "plaid", "checkr", "carta", "flexport", "convoy", "rivian", "lucid", "tesla"
+        "discord", "cloudflare", "mongodb", "github", "gitlab", "reddit",
+        "rippling", "brex", "ramp", "plaid", "checkr", "carta",
+        "rivian", "lucid", "figma", "notion", "airtable", "vercel", "linear",
+        "anthropic", "openai", "cohere", "huggingface"
     ];
     let jobs = [];
+    const newGradKeywords = ['new grad', 'entry level', 'associate', 'junior', 'jr.', 'graduate', 'early career', 'intern', 'software engineer i', 'engineer i', 'analyst i', 'university'];
     for (const board of boards) {
         try {
             const { data } = await axios.get(`https://boards-api.greenhouse.io/v1/boards/${board}/jobs`, { timeout: 15000 });
             if (data && data.jobs) {
                 data.jobs.forEach(job => {
+                    const titleLower = (job.title || '').toLowerCase();
+                    // Accept: new grad keywords, OR any technical role (engineers, scientists, analysts)
+                    const isRelevant = newGradKeywords.some(k => titleLower.includes(k)) ||
+                        titleLower.includes('engineer') || titleLower.includes('developer') ||
+                        titleLower.includes('scientist') || titleLower.includes('analyst') ||
+                        titleLower.includes('designer') || titleLower.includes('intern');
+                    if (!isRelevant) return;
                     jobs.push({
                         id: `grn-${job.internal_job_id}`,
                         title: job.title,
@@ -944,6 +988,60 @@ async function fetchGreenhouseJobs() {
     return jobs;
 }
 
+/**
+ * Utility to parse relative date strings from job boards
+ * e.g. "3 days ago", "1 week ago", "Just posted"
+ */
+function parseRelativeDate(str) {
+    if (!str) return Date.now();
+    const lower = str.toLowerCase();
+    const now = Date.now();
+    const HOUR = 60 * 60 * 1000;
+    const DAY = 24 * HOUR;
+
+    if (lower.includes('hour')) {
+        const h = parseInt(lower.match(/\d+/)?.[0]) || 1;
+        return now - (h * HOUR);
+    }
+    if (lower.includes('day')) {
+        const d = parseInt(lower.match(/\d+/)?.[0]) || 1;
+        return now - (d * DAY);
+    }
+    if (lower.includes('week')) {
+        const w = parseInt(lower.match(/\d+/)?.[0]) || 1;
+        return now - (w * 7 * DAY);
+    }
+    if (lower.includes('month')) {
+        const m = parseInt(lower.match(/\d+/)?.[0]) || 1;
+        return now - (m * 30 * DAY);
+    }
+    if (lower.includes('just') || lower.includes('today') || lower.includes('moment')) {
+        return now;
+    }
+    
+    const parsed = new Date(str);
+    return isNaN(parsed.getTime()) ? now : parsed.getTime();
+}
+
+function generateTags(title, desc, loc) {
+    const tags = new Set(['verified']);
+    const t = (title + ' ' + desc + ' ' + loc).toLowerCase();
+    if (t.includes('remote') || t.includes('anywhere')) tags.add('remote');
+    if (t.includes('new grad') || t.includes('graduate')) tags.add('new grad');
+    if (t.includes('entry level') || t.includes('junior')) tags.add('entry-level');
+    if (t.includes('visa') || t.includes('h1b') || t.includes('sponsorship')) tags.add('visa-friendly');
+    if (t.includes('python')) tags.add('python');
+    if (t.includes('react')) tags.add('react');
+    if (t.includes('node')) tags.add('nodejs');
+    return JSON.stringify(Array.from(tags));
+}
+
+function extractSkills(title, desc) {
+    const skills = ['react', 'node.js', 'python', 'java', 'sql', 'aws', 'docker', 'kubernetes', 'typescript', 'javascript', 'c++', 'go'];
+    const text = (title + ' ' + desc).toLowerCase();
+    return JSON.stringify(skills.filter(s => text.includes(s.toLowerCase())));
+}
+
 async function fetchApifyJobs() {
     const token = process.env.APIFY_API_KEY;
     if (!token) return [];
@@ -957,24 +1055,26 @@ async function fetchApifyJobs() {
         "Machine Learning Engineer Entry Level USA",
         "Cyber Security Analyst Junior USA",
         "Product Manager New Grad USA",
-        "UX Designer Entry Level USA",
-        "Systems Engineer New Grad USA",
-        "DevOps Engineer Junior USA"
+        "UX Designer Entry Level USA"
     ];
 
     let allJobs = [];
     
     try {
+        // Using sync run for small result sets, increased timeout
         const { data } = await axios.post(`https://api.apify.com/v2/acts/apify~google-jobs-scraper/run-sync-get-dataset-items?token=${token}`, {
             queries: queries.join('\n'),
             maxPagesPerQuery: 1,
-            maxResultsPerQuery: 20,
-            searchRegion: "United States"
-        }, { timeout: 120000 });
+            maxResultsPerQuery: 15,
+            searchRegion: "United States",
+            sort: "date"
+        }, { timeout: 180000 });
 
         if (Array.isArray(data)) {
             data.forEach(item => {
                 if (!item.title || !item.companyName) return;
+                
+                const postedVal = parseRelativeDate(item.postedAt);
                 
                 allJobs.push({
                     id: `apf-${item.jobId || crypto.createHash('md5').update(item.title + item.companyName).digest('hex')}`,
@@ -982,12 +1082,12 @@ async function fetchApifyJobs() {
                     company: item.companyName,
                     location: item.location || "Remote",
                     type: "Full-time",
-                    postedValue: item.postedAt ? new Date(item.postedAt).getTime() : Date.now(),
-                    posted: item.postedAt ? getPostedTime(item.postedAt) : "Recently",
+                    postedValue: postedVal,
+                    posted: item.postedAt || "Recently",
                     salary: item.salary || 'Competitive',
                     tags: generateTags(item.title, item.description || "", item.location || "Remote"),
                     logo: item.companyName.charAt(0).toUpperCase(),
-                    match: getMatchScore(item.title),
+                    match: 75, // Default for new discoveries
                     description: (item.description || "").substring(0, 5000),
                     skills: extractSkills(item.title, item.description || ""),
                     link: item.applyLink || item.url,
@@ -995,7 +1095,7 @@ async function fetchApifyJobs() {
                 });
             });
         }
-        console.log(`[Scraper] Apify found ${allJobs.length} potential jobs.`);
+        console.log(`[Scraper] Apify found ${allJobs.length} fresh targets.`);
     } catch (err) {
         console.error('[Scraper] Apify fetch error:', err.message);
     }
@@ -1071,11 +1171,13 @@ app.get('/api/jobs', async (req, res) => {
             params.push(minSal);
         }
 
-        // Recency filter — created_at is ISO text; SQLite handles datetime('now', '-N days').
+        // Recency filter — uses posted_value (ms timestamp)
         const days = parseInt(postedWithinDays) || 0;
         if (days > 0) {
-            where.push("created_at >= datetime('now', ?)");
-            params.push(`-${days} days`);
+            const ms = days * 24 * 60 * 60 * 1000;
+            const threshold = Date.now() - ms;
+            where.push('posted_value >= ?');
+            params.push(threshold);
         }
 
         // Lightweight tag filters on the stored tags JSON blob.
@@ -1085,7 +1187,9 @@ app.get('/api/jobs', async (req, res) => {
 
         let query = 'SELECT * FROM jobs';
         if (where.length) query += ' WHERE ' + where.join(' AND ');
-        query += ' ORDER BY posted_value DESC LIMIT 200';
+        
+        // Ensure new jobs (higher posted_value) always come first, handle NULLs by putting them last
+        query += ' ORDER BY CASE WHEN posted_value IS NULL THEN 0 ELSE posted_value END DESC LIMIT 200';
 
         let rows = await db.all(query, params);
 
@@ -1133,7 +1237,7 @@ app.get('/api/jobs/verified', async (req, res) => {
         const { limit = 50 } = req.query;
 
         let rows = await db.all(
-            'SELECT * FROM jobs WHERE is_trusted = 1 ORDER BY posted_value DESC LIMIT ?',
+            'SELECT * FROM jobs WHERE is_trusted = 1 ORDER BY CASE WHEN posted_value IS NULL THEN 0 ELSE posted_value END DESC LIMIT ?',
             [Math.min(limit, 100)]
         );
 
@@ -1182,7 +1286,9 @@ app.get('/api/jobs/recommended', authenticateToken, async (req, res) => {
         }
 
         const resumeData = JSON.parse(user.resume_data);
-        const jobs = await db.all('SELECT * FROM jobs ORDER BY posted_value DESC LIMIT 100');
+        // Only look at jobs from the last 7 days for recommendations
+        const weekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+        const jobs = await db.all('SELECT * FROM jobs WHERE posted_value >= ? OR posted_value IS NULL ORDER BY posted_value DESC LIMIT 100', [weekAgo]);
 
         const matchedJobs = await matchingEngine.findMatchingJobs(
             req.user.id,
