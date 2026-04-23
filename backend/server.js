@@ -167,7 +167,7 @@ const aiLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, message: { error: 'A
 // Configure CORS for production and development
 const corsOptions = {
     origin: process.env.NODE_ENV === 'production'
-        ? ['https://gradlaunch.vercel.app', 'https://www.gradlaunch.vercel.app']
+        ? ['https://gradlaunch.vercel.app', 'https://www.gradlaunch.vercel.app', 'https://gradlaunch-ecru.vercel.app', /\.vercel\.app$/]
         : ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
