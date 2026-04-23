@@ -344,9 +344,10 @@ function JobDetail({ job, onClose, onTailor, onApply }) {
           {(job.tags || []).map(t => <Tag key={t} label={t} />)}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 22 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 22 }}>
           <button onClick={() => onApply(job)} style={{ padding: "12px", borderRadius: 10, background: `linear-gradient(135deg, ${C.accent} 0%, ${C.accentDim} 100%)`, border: "none", color: C.bg, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "DM Sans, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, boxShadow: `0 0 20px ${C.accentGlow}` }}><Zap size={14} /> Auto-apply now</button>
           <button onClick={() => onTailor(job)} style={{ padding: "12px", borderRadius: 10, background: C.surface, border: `1px solid ${C.border}`, color: C.text, fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "DM Sans, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><FileText size={14} /> Tailor resume</button>
+          <button onClick={() => window.open(`${API}/api/resume/download?user_id=demo-user&job_id=${job.id}`)} style={{ padding: "12px", borderRadius: 10, background: C.surface, border: `1px solid ${C.border}`, color: C.text, fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "DM Sans, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Download size={14} /> Download ATS Resume</button>
         </div>
 
         {/* Why you match */}

@@ -4,7 +4,7 @@
  
 const express = require('express');
 const multer = require('multer');
-const Anthropic = require('@anthropic-ai/sdk');
+const { GoogleGenAI } = require('@google/genai');
 const { createClient } = require('@libsql/client');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
@@ -13,7 +13,7 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
  
 // --- clients ---
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const db = createClient({
   url: process.env.TURSO_DATABASE_URL || "file:database.sqlite",
   authToken: process.env.TURSO_AUTH_TOKEN || "",
@@ -99,13 +99,12 @@ router.post('/upload', upload.single('resume'), async (req, res) => {
     const rawText = await extractText(req.file);
  
     // parse with Claude (Haiku is fine for extraction — fast + cheap)
-    const parseResp = await anthropic.messages.create({
-      model: 'claude-3-haiku-20240307',
-      max_tokens: 2000,
-      messages: [{ role: 'user', content: PARSE_PROMPT + rawText }],
+    const parseResp = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: PARSE_PROMPT + rawText,
     });
  
-    const parsedText = parseResp.content[0].text.trim().replace(/^```json\s*|\s*```$/g, '');
+    const parsedText = parseResp.text.trim().replace(/^\s*```json\s*|\s*```\s*$/g, '');
     const parsed = JSON.parse(parsedText);
  
     await db.execute({
@@ -156,13 +155,12 @@ router.post('/tailor', async (req, res) => {
     const resume = JSON.parse(resumeRow.rows[0].parsed_json);
  
     // tailor with Sonnet (better reasoning for rewrites)
-    const resp = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1500,
-      messages: [{ role: 'user', content: TAILOR_PROMPT(resume, job_description) }],
+    const resp = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: TAILOR_PROMPT(resume, job_description),
     });
  
-    const rawOutput = resp.content[0].text.trim().replace(/^```json\s*|\s*```$/g, '');
+    const rawOutput = resp.text.trim().replace(/^\s*```json\s*|\s*```\s*$/g, '');
     const result = JSON.parse(rawOutput);
  
     // cache
@@ -193,4 +191,53 @@ router.get('/me', async (req, res) => {
   });
 });
  
+// GET /api/resume/download
+router.get('/download', async (req, res) => {
+  try {
+    const userId = req.user?.id || req.query.user_id || 'demo-user';
+    const { job_id } = req.query;
+
+    const resumeRow = await db.execute({
+      sql: 'SELECT parsed_json FROM resumes WHERE user_id = ?',
+      args: [userId],
+    });
+    if (resumeRow.rows.length === 0) return res.status(404).send('No resume found');
+    const resume = JSON.parse(resumeRow.rows[0].parsed_json);
+
+    let bullets = [];
+    if (job_id) {
+      const tailoredRow = await db.execute({
+        sql: 'SELECT bullets_json FROM tailored_resumes WHERE user_id = ? AND job_id = ?',
+        args: [userId, job_id],
+      });
+      if (tailoredRow.rows.length > 0) {
+        bullets = JSON.parse(tailoredRow.rows[0].bullets_json);
+      }
+    }
+
+    let textOutput = `${resume.name || 'Candidate Name'}\n${resume.email || ''} | ${resume.phone || ''}\n\n`;
+    textOutput += `EXPERIENCE\n--------------------------\n`;
+    (resume.experience || []).forEach((exp, i) => {
+      textOutput += `${exp.role} at ${exp.company} (${exp.dates})\n`;
+      if (bullets.length > 0 && bullets[i]) {
+        textOutput += `- ${bullets[i]}\n`;
+      } else {
+        (exp.bullets || []).forEach(b => { textOutput += `- ${b}\n`; });
+      }
+      textOutput += `\n`;
+    });
+    
+    textOutput += `EDUCATION\n--------------------------\n`;
+    (resume.education || []).forEach(edu => {
+      textOutput += `${edu.degree} - ${edu.school} (${edu.dates})\n`;
+    });
+
+    res.setHeader('Content-disposition', 'attachment; filename=Tailored_Resume.txt');
+    res.setHeader('Content-type', 'text/plain');
+    res.send(textOutput);
+  } catch (err) {
+    res.status(500).send('Error generating resume');
+  }
+});
+
 module.exports = router;
