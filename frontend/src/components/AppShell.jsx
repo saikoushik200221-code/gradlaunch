@@ -853,6 +853,22 @@ export default function AppShell({ currentUser, token, onLogout }) {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
 
+    const forceScrapeAndFetch = async () => {
+    setLoading(true);
+    try {
+      // Force the backend to scrape immediately
+      await fetch(`${API}/api/jobs/scrape`, { 
+        method: 'POST', 
+        headers: token ? { Authorization: `Bearer ${token}` } : {} 
+      });
+      // Fetch the newly scraped jobs
+      const res = await fetch(`${API}/api/jobs?limit=100`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const data = await res.json();
+      setJobs(Array.isArray(data) ? data : (data.jobs || []));
+    } catch (e) {}
+    setLoading(false);
+  };
+  
   const fetchJobs = async () => {
     setLoading(true);
     try {
@@ -894,7 +910,7 @@ export default function AppShell({ currentUser, token, onLogout }) {
       <div style={{ display: "flex", background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "DM Sans, sans-serif" }}>
         <Sidebar active={active} setActive={setActive} applications={applications} jobsCount={jobs.length} currentUser={currentUser} onLogout={onLogout} />
         <main style={{ flex: 1, padding: "24px 32px", maxWidth: 1280, margin: "0 auto", width: "100%" }}>
-          {active === "jobs" && <JobMatches jobs={jobs.length ? jobs : JOBS} loading={loading} onRefresh={fetchJobs} onOpenJob={setOpenJob} onAddToTracker={addToTracker} />}
+          {active === "jobs" && <JobMatches jobs={jobs.length ? jobs : JOBS} loading={loading} onRefresh={forceScrapeAndFetch} onOpenJob={setOpenJob} onAddToTracker={addToTracker} />}
           {active === "tailor" && <ResumeTailor targetJob={tailorTarget} />}
           {active === "tracker" && <Tracker applications={applications} setApplications={setApplications} />}
           {active === "autofill" && <AutoApply />}
