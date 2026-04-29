@@ -1138,13 +1138,13 @@ function generateTags(title, desc, loc) {
     if (t.includes('python')) tags.add('python');
     if (t.includes('react')) tags.add('react');
     if (t.includes('node')) tags.add('nodejs');
-    return JSON.stringify(Array.from(tags));
+    return Array.from(tags);
 }
 
 function extractSkills(title, desc) {
     const skills = ['react', 'node.js', 'python', 'java', 'sql', 'aws', 'docker', 'kubernetes', 'typescript', 'javascript', 'c++', 'go'];
     const text = (title + ' ' + desc).toLowerCase();
-    return JSON.stringify(skills.filter(s => text.includes(s.toLowerCase())));
+    return skills.filter(s => text.includes(s.toLowerCase()));
 }
 
 async function fetchApifyJobs() {
@@ -1328,7 +1328,7 @@ app.get('/api/jobs', async (req, res) => {
 
         if (q) {
             where.push("(title LIKE ? OR company LIKE ? OR description LIKE ?)");
-            const searchTerm = `% ${q} % `;
+            const searchTerm = `%${q}%`;
             params.push(searchTerm, searchTerm, searchTerm);
         }
 
