@@ -60,10 +60,13 @@ class ResumeMatchingEngine {
           throw new Error('PDF parsing library not available');
         }
         const data = await pdfParser(buffer);
+        text = data.text;
+        console.log('[ResumeMatching] Parsed PDF:', (text || '').length, 'characters');
+      } else if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        const result = await mammoth.extractRawText({ buffer });
         text = result.value;
         console.log('[ResumeMatching] Parsed DOCX:', (text || '').length, 'characters');
-      }
-      else {
+      } else {
         throw new Error(`Unsupported file type: ${mimetype}`);
       }
 
